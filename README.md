@@ -7,7 +7,7 @@ Super Installer is a Neovim plugin designed to simplify the process of installin
 ### Mac
 
 ```shell
-git clone git clone https://github.com/wukuohao2003/super-installer ～/.local/share/nvim/site/pack/packer/start
+git clone https://github.com/wukuohao2003/super-installer ～/.local/share/nvim/site/pack/packer/start
 ```
 
 ### Windows
