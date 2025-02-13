@@ -2,7 +2,7 @@ local ui = require('super-installer.model.ui')
 local vim = vim
 
 local function download_plugin(plugin, use_ssh)
-    local base_dir = vim.fn.stdpath('data') .. '/site/pack/plugins/start/'
+    local base_dir = vim.fn.stdpath('data') .. '/site/pack/packer/start'
     local repo_url
     if use_ssh then
         repo_url = 'git@github.com:' .. plugin .. '.git'
