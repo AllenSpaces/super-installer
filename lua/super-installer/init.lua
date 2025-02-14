@@ -7,37 +7,6 @@ M.setup = function(config)
 
         -- default 为默认安装的插件
         install = {
-            default = "wukuohao2003/super-installer",
-
-            -- 安装的插件 格式为 {username}/{repo}，例如 "wukuohao2003/super-installer"，
-            use = {}
-        },
-
-        -- 快捷键绑定
-        keymaps = {
-
-            -- 安装插件快捷键
-            install = "<leader>si",
-
-            -- 移除未定义的插件
-            remove = "<leader>sr",
-
-            -- 更新插件
-            update = "<leader>su",
-            
-        }
-    }
-
-    lua
-local M = {}
-
-M.setup = function(config)
-    local super_config = {
-        -- 安装插件的方式
-        git = "ssh",
-
-        -- default 为默认安装的插件
-        install = {
             default = "wukuohao2003/super-installergit.git",
 
             -- 安装的插件 格式为 {username}/{repo}，例如 "wukuohao2003/super-installer"，
