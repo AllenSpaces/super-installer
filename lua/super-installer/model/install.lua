@@ -9,6 +9,7 @@ local function download_plugin(plugin, use_ssh)
     else
         repo_url = 'https://github.com/' .. plugin .. '.git'
     end
+    
     local cmd = string.format('git clone %s %s%s', repo_url, base_dir, vim.fn.fnamemodify(plugin, ':t'))
 
     ui.create_float_win()
