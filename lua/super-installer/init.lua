@@ -34,12 +34,12 @@ M.setup = function(config)
 
     -- 定义 SuperInstall 命令
     vim.api.nvim_create_user_command('SuperInstall', function()
-        installer.install_plugins(super_config)
+        installer.download_plugin(super_config)
     end, {})
 
     -- 定义 SuperRemove 命令
     vim.api.nvim_create_user_command('SuperRemove', function()
-        remover.remove_unused_plugins(super_config)
+        remover.remove_plugin(super_config)
     end, {})
 
     -- 设置快捷键
