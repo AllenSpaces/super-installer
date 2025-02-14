@@ -1,55 +1,52 @@
-local M = {}
 local ui = require("super-installer.model.ui")
 
-local function get_installed_plugins()
-    local install_dir = vim.fn.stdpath("data") .. "/site/pack/super-installer/start/"
-    return vim.split(vim.fn.glob(install_dir .. "/*"), "\n")
-end
+local M = {}
 
-local function get_configured_plugins()
-    local config = require("super-installer").config
-    local plugins = {}
-    
+function M.start(config)
+    local used_plugins = {}
     for _, plugin in ipairs(config.install.use) do
-        table.insert(plugins, plugin:gsub("/", "-"))
+        used_plugins[plugin:match("/([^/]+)$")] = true
     end
-    table.insert(plugins, config.install.default:gsub("/", "-"))
-    
-    return plugins
-end
 
-function M.run()
-    local installed = get_installed_plugins()
-    local configured = get_configured_plugins()
+    local install_dir = vim.fn.stdpath("data") .. "/site/pack/super-installer/start/"
+    local installed_plugins = vim.split(vim.fn.glob(install_dir .. "/*"), "\n")
     local to_remove = {}
-    local errors = {}
-
-    -- 找出需要移除的插件
-    for _, path in ipairs(installed) do
-        local name = vim.fn.fnamemodify(path, ":t")
-        if not vim.tbl_contains(configured, name) then
-            table.insert(to_remove, {path = path, name = name})
+    
+    for _, path in ipairs(installed_plugins) do
+        local plugin_name = vim.fn.fnamemodify(path, ":t")
+        if not used_plugins[plugin_name] then
+            table.insert(to_remove, plugin_name)
         end
     end
 
-    ui.show_remove_ui(#to_remove)
+    local total = #to_remove
+    local errors = {}
+    local success_count = 0
+    local win = ui.create_window("Removing Plugins...", 4, 50)
 
     for i, plugin in ipairs(to_remove) do
-        ui.update_remove_ui(i, #to_remove, plugin.name)
-        local result = os.execute(string.format("rm -rf %s", vim.fn.shellescape(plugin.path)))
-        if result ~= 0 then
-            table.insert(errors, {
-                plugin = plugin.name,
-                error = "Exit code: " .. tostring(result)
-            })
+        ui.update_progress(win, "Removing: " .. plugin, i, total)
+        local ok, err = M.remove_plugin(plugin)
+        if ok then
+            success_count = success_count + 1
+        else
+            table.insert(errors, {plugin = plugin, error = err})
         end
     end
 
-    ui.close_remove_ui()
+    vim.api.nvim_win_close(win.win_id, true)
+    ui.show_results(errors, success_count, total, "Removal")
+end
 
-    if #errors > 0 then
-        ui.show_result_ui(errors, "Removal Errors")
+function M.remove_plugin(plugin_name)
+    local install_dir = vim.fn.stdpath("data") .. "/site/pack/super-installer/start/" .. plugin_name
+    local cmd = string.format("rm -rf %s 2>&1", install_dir)
+    local result = vim.fn.system(cmd)
+    
+    if vim.v.shell_error ~= 0 then
+        return false, result:gsub("\n", " "):sub(1, 50) .. "..."
     end
+    return true
 end
 
 return M

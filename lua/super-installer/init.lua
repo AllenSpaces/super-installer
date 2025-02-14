@@ -1,6 +1,6 @@
-local M = {}
-
-M.config = {}
+local M = {
+    config = {}
+}
 
 M.setup = function(user_config)
     local default_config = {
@@ -16,28 +16,17 @@ M.setup = function(user_config)
         }
     }
 
+    -- 合并配置
     M.config = vim.tbl_deep_extend("force", default_config, user_config or {})
 
     -- 创建用户命令
     vim.api.nvim_create_user_command("SuperInstall", function()
-        require("super-installer.model.install").run()
+        require("super-installer.model.install").start(M.config)
     end, {})
 
     vim.api.nvim_create_user_command("SuperRemove", function()
-        require("super-installer.model.remove").run()
+        require("super-installer.model.remove").start(M.config)
     end, {})
-
-    -- 设置快捷键映射
-    local function map_keys()
-        if M.config.keymaps.install then
-            vim.keymap.set("n", M.config.keymaps.install, "<cmd>SuperInstall<CR>", { silent = true })
-        end
-        if M.config.keymaps.remove then
-            vim.keymap.set("n", M.config.keymaps.remove, "<cmd>SuperRemove<CR>", { silent = true })
-        end
-    end
-
-    map_keys()
 end
 
 return M
