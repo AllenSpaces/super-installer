@@ -7,7 +7,7 @@ M.setup = function(config)
 
         -- default 为默认安装的插件
         install = {
-            default = "wukuohao2003/super-installergit.git",
+            default = "wukuohao2003/super-installer.nvim.git",
 
             -- 安装的插件 格式为 {username}/{repo}，例如 "wukuohao2003/super-installer"，
             use = {}

@@ -1,15 +1,15 @@
 local ui = require('super-installer.model.ui')
 local vim = vim
 
+-- 从 git 下载插件
 local function download_plugin(plugin, use_ssh)
-    local base_dir = vim.fn.stdpath('data') .. '/site/pack/packer/start'
+    local base_dir = vim.fn.stdpath('data') .. '/site/pack/plugins/start/'
     local repo_url
     if use_ssh then
         repo_url = 'git@github.com:' .. plugin .. '.git'
     else
         repo_url = 'https://github.com/' .. plugin .. '.git'
     end
-
     local cmd = string.format('git clone %s %s%s', repo_url, base_dir, vim.fn.fnamemodify(plugin, ':t'))
 
     ui.create_float_win()
@@ -46,14 +46,13 @@ local function download_plugin(plugin, use_ssh)
     return success, err_msg
 end
 
+-- 同步安装所有插件
 local function install_plugins(config)
     local use_ssh = config.git == "ssh"
     local plugins = { config.install.default }
     for _, plugin in ipairs(config.install.use) do
         table.insert(plugins, plugin)
     end
-
-    print(plugins)
 
     local errors = {}
     for _, plugin in ipairs(plugins) do

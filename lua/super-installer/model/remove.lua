@@ -1,6 +1,7 @@
 local ui = require('super-installer.model.ui')
 local vim = vim
 
+-- 移除插件
 local function remove_plugin(plugin)
     local base_dir = vim.fn.stdpath('data') .. '/site/pack/plugins/start/'
     local plugin_dir = base_dir .. vim.fn.fnamemodify(plugin, ':t')
