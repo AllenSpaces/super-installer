@@ -1,72 +1,54 @@
-local ui = require('super-installer.model.ui')
-local vim = vim
+local M = {}
+local ui = require("super-installer.model.ui")
 
--- 从 git 下载插件
-local function download_plugin(plugin, use_ssh)
-    local base_dir = vim.fn.stdpath('data') .. '/site/pack/plugins/start/'
-    local repo_url
-    if use_ssh then
-        repo_url = 'git@github.com:' .. plugin .. '.git'
-    else
-        repo_url = 'https://github.com/' .. plugin .. '.git'
-    end
-    local cmd = string.format('git clone %s %s%s', repo_url, base_dir, vim.fn.fnamemodify(plugin, ':t'))
-
-    ui.create_float_win()
-    local success = false
-    local err_msg = nil
-    local job_id = vim.fn.jobstart(cmd, {
-        on_stdout = function(_, data)
-            if data then
-                local progress = 0
-                for _, line in ipairs(data) do
-                    progress = math.min(progress + 0.1, 1)
-                    ui.update_float_win(plugin, progress)
-                end
-            end
-        end,
-        on_stderr = function(_, data)
-            if data then
-                err_msg = table.concat(data, '\n')
-            end
-        end,
-        on_exit = function(_, exit_code)
-            ui.close_float_win()
-            success = exit_code == 0
-            if not success then
-                err_msg = err_msg or string.format("Failed to install %s, exit code: %d", plugin, exit_code)
-            end
-        end
-    })
-
-    while vim.fn.jobwait({ job_id }, 100)[1] == -1 do
-        vim.cmd('redraw')
-    end
-
-    return success, err_msg
+local function get_install_path(plugin_name)
+    return vim.fn.stdpath("data") .. "/site/pack/super-installer/start/" .. plugin_name:gsub("/", "-")
 end
 
--- 同步安装所有插件
-local function install_plugins(config)
-    local use_ssh = config.git == "ssh"
-    local plugins = { config.install.default }
-    for _, plugin in ipairs(config.install.use) do
-        table.insert(plugins, plugin)
+local function get_repo_url(plugin, config)
+    if config.git == "ssh" then
+        return "git@github.com:" .. plugin .. ".git"
+    else
+        return "https://github.com/" .. plugin .. ".git"
     end
+end
 
+function M.run()
+    local config = require("super-installer").config
+    local plugins = vim.deepcopy(config.install.use)
+    table.insert(plugins, 1, config.install.default)
+
+    local total = #plugins
+    local current = 0
     local errors = {}
+
+    ui.show_install_ui(total)
+
     for _, plugin in ipairs(plugins) do
-        local success, err = download_plugin(plugin, use_ssh)
-        if not success then
-            table.insert(errors, err)
+        current = current + 1
+        ui.update_install_ui(current, total, plugin)
+
+        local install_path = get_install_path(plugin)
+        local repo_url = get_repo_url(plugin, config)
+
+        -- 检查是否已安装
+        if vim.fn.isdirectory(install_path) == 0 then
+            local cmd = string.format("git clone --depth 1 %s %s", repo_url, install_path)
+            local result = os.execute(cmd)
+            if result ~= 0 then
+                table.insert(errors, {
+                    plugin = plugin,
+                    error = "Exit code: " .. tostring(result)
+                })
+            end
         end
     end
+
+    ui.close_install_ui()
 
     if #errors > 0 then
-        ui.create_error_win(errors)
+        ui.show_result_ui(errors, "Installation Errors")
     end
 end
 
-return {
-    install_plugins = install_plugins
-}
+return M

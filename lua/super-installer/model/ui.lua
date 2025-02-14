@@ -1,76 +1,104 @@
-local float_win_id = nil
-local float_buf_id = nil
-local error_win_id = nil
-local error_buf_id = nil
+local M = {}
+local namespace = vim.api.nvim_create_namespace("SuperInstallerUI")
 
-local function create_float_win()
-    local screen_width = vim.opt.columns:get()
-    local screen_height = vim.opt.lines:get()
-    local win_width = math.floor(screen_width * 0.4)
-    local win_height = 3
-    local col = math.floor((screen_width - win_width) / 2)
-    local row = math.floor((screen_height - win_height) / 2)
-
-    float_buf_id = vim.api.nvim_create_buf(false, true)
-    float_win_id = vim.api.nvim_open_win(float_buf_id, false, {
+-- 通用窗口配置
+local function create_window(title, height, lines)
+    local width = 60
+    local buf = vim.api.nvim_create_buf(false, true)
+    local win = vim.api.nvim_open_win(buf, true, {
         relative = "editor",
-        width = win_width,
-        height = win_height,
-        col = col,
-        row = row,
-        border = "rounded",
+        width = width,
+        height = height,
+        col = (vim.o.columns - width) / 2,
+        row = (vim.o.lines - height) / 2,
         style = "minimal",
+        border = "rounded"
+    })
+
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+    vim.api.nvim_buf_add_highlight(buf, namespace, "Title", 0, 0, -1)
+    return { win = win, buf = buf }
+end
+
+-- 安装UI
+function M.show_install_ui(total)
+    M.install_win = create_window("Installing", 5, {
+        " Installing Plugins ",
+        "",
+        "Progress: [          ] 0/" .. total,
+        "",
+        "Current: "
     })
 end
 
-local function update_float_win(plugin_name, progress)
-    if float_buf_id then
-        local lines = {
-            "Processing: " .. plugin_name,
-            string.rep("=", math.floor(progress * 20)) .. string.rep(" ", 20 - math.floor(progress * 20))
-        }
-        vim.api.nvim_buf_set_lines(float_buf_id, 0, -1, false, lines)
-    end
-end
+function M.update_install_ui(current, total, plugin)
+    if not M.install_win then return end
 
-local function close_float_win()
-    if float_win_id then
-        vim.api.nvim_win_close(float_win_id, true)
-        float_win_id = nil
-    end
-    if float_buf_id then
-        vim.api.nvim_buf_delete(float_buf_id, { force = true })
-        float_buf_id = nil
-    end
-end
-
-local function create_error_win(errors)
-    local screen_width = vim.opt.columns:get()
-    local screen_height = vim.opt.lines:get()
-    local win_width = math.floor(screen_width * 0.6)
-    local win_height = #errors + 2
-    local col = math.floor((screen_width - win_width) / 2)
-    local row = math.floor((screen_height - win_height) / 2)
-
-    error_buf_id = vim.api.nvim_create_buf(false, true)
-    vim.api.nvim_buf_set_lines(error_buf_id, 0, -1, false, { "Plugins with errors:" })
-    vim.api.nvim_buf_set_lines(error_buf_id, 1, -1, false, errors)
-    error_win_id = vim.api.nvim_open_win(error_buf_id, true, {
-        relative = "editor",
-        width = win_width,
-        height = win_height,
-        col = col,
-        row = row,
-        border = "rounded",
-        style = "minimal",
+    local progress = math.floor((current / total) * 10)
+    local progress_bar = "[" .. string.rep("=", progress) .. string.rep(" ", 10 - progress) .. "]"
+    
+    vim.api.nvim_buf_set_lines(M.install_win.buf, 2, 3, false, {
+        "Progress: " .. progress_bar .. " " .. current .. "/" .. total
     })
-
-    vim.api.nvim_buf_set_keymap(error_buf_id, "n", "q", "<Cmd>q<CR>", { noremap = true, silent = true })
+    vim.api.nvim_buf_set_lines(M.install_win.buf, 4, 5, false, {
+        "Current: " .. plugin
+    })
 end
 
-return {
-    create_float_win = create_float_win,
-    update_float_win = update_float_win,
-    close_float_win = close_float_win,
-    create_error_win = create_error_win
-}
+-- 移除UI
+function M.show_remove_ui(total)
+    M.remove_win = create_window("Removing", 5, {
+        " Removing Plugins ",
+        "",
+        "Progress: [          ] 0/" .. total,
+        "",
+        "Current: "
+    })
+end
+
+function M.update_remove_ui(current, total, plugin)
+    if not M.remove_win then return end
+
+    local progress = math.floor((current / total) * 10)
+    local progress_bar = "[" .. string.rep("=", progress) .. string.rep(" ", 10 - progress) .. "]"
+    
+    vim.api.nvim_buf_set_lines(M.remove_win.buf, 2, 3, false, {
+        "Progress: " .. progress_bar .. " " .. current .. "/" .. total
+    })
+    vim.api.nvim_buf_set_lines(M.remove_win.buf, 4, 5, false, {
+        "Current: " .. plugin
+    })
+end
+
+-- 通用关闭函数
+function M.close_install_ui()
+    if M.install_win and vim.api.nvim_win_is_valid(M.install_win.win) then
+        vim.api.nvim_win_close(M.install_win.win, true)
+    end
+    M.install_win = nil
+end
+
+function M.close_remove_ui()
+    if M.remove_win and vim.api.nvim_win_is_valid(M.remove_win.win) then
+        vim.api.nvim_win_close(M.remove_win.win, true)
+    end
+    M.remove_win = nil
+end
+
+-- 结果显示UI
+function M.show_result_ui(errors, title)
+    local lines = { " " .. title .. " " }
+    table.insert(lines, "")
+    
+    for _, e in ipairs(errors) do
+        table.insert(lines, string.format("• %s: %s", e.plugin, e.error))
+    end
+    
+    table.insert(lines, "")
+    table.insert(lines, "Press q to close")
+    
+    local win = create_window(title, #lines + 2, lines)
+    vim.api.nvim_buf_set_keymap(win.buf, "n", "q", "<cmd>q!<CR>", { noremap = true, silent = true })
+end
+
+return M
