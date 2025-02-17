@@ -17,15 +17,16 @@ end
 
 function M.update_progress(win, text, completed, total)
     local progress_percentage = math.floor((completed / total) * 100)
-    local bar_length = 60
-    local filled_length = math.floor((progress_percentage / 100) * bar_length)
-    local progress_bar = string.rep("-", filled_length) .. string.rep(" ", bar_length - filled_length)
+    local width = #text + 5
     local status_text = string.format("%d/%d (%d%%)", completed, total, progress_percentage)
+    local progress_bar_length = width - #status_text - 2 -- 减去状态文本长度和前后符号长度
+    local filled_length = math.floor((progress_percentage / 100) * progress_bar_length)
+    local progress_bar = string.rep("-", filled_length) .. string.rep(" ", progress_bar_length - filled_length)
 
     local lines = {
         text,
-        status_text,
-        "·" .. progress_bar
+        "", 
+        "·" .. progress_bar .. "· " .. string.format("%-".. width.."s", status_text),
     }
     vim.api.nvim_buf_set_lines(win.buf, 0, -1, false, lines)
 end
