@@ -35,6 +35,12 @@ function M.install_plugin(plugin, git_type)
 
     local install_dir = vim.fn.stdpath("data") .. "/site/pack/super-installer/start/" .. plugin:match("/([^/]+)$")
 
+    -- 判断本地仓库是否存在
+    if vim.fn.isdirectory(install_dir) == 1 then
+        -- 本地仓库已存在，不进行克隆操作
+        return true
+    end
+
     local cmd = string.format("git clone --depth 1 %s %s 2>&1", repo_url, install_dir)
     local result = vim.fn.system(cmd)
     

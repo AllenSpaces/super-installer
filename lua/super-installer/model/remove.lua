@@ -11,7 +11,7 @@ function M.start(config)
     local install_dir = vim.fn.stdpath("data") .. "/site/pack/super-installer/start/"
     local installed_plugins = vim.split(vim.fn.glob(install_dir .. "/*"), "\n")
     local to_remove = {}
-    
+
     for _, path in ipairs(installed_plugins) do
         local plugin_name = vim.fn.fnamemodify(path, ":t")
         if not used_plugins[plugin_name] then
@@ -40,9 +40,14 @@ end
 
 function M.remove_plugin(plugin_name)
     local install_dir = vim.fn.stdpath("data") .. "/site/pack/super-installer/start/" .. plugin_name
+    -- 判断本地仓库目录是否存在
+    if vim.fn.isdirectory(install_dir) ~= 1 then
+        -- 目录不存在，不做操作，直接返回成功
+        return true
+    end
     local cmd = string.format("rm -rf %s 2>&1", install_dir)
     local result = vim.fn.system(cmd)
-    
+
     if vim.v.shell_error ~= 0 then
         return false, result:gsub("\n", " "):sub(1, 50) .. "..."
     end
