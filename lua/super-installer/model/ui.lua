@@ -24,11 +24,12 @@ function M.update_progress(win, text, completed, total)
     local progress_bar = string.rep("-", filled_length) .. string.rep(" ", progress_bar_length - filled_length)
 
     local lines = {
-        text,
-        "", 
         "·" .. progress_bar .. "· " .. string.format("%-".. width.."s", status_text),
     }
+    
+    vim.api.nvim_buf_set_name(win.buf,text)
     vim.api.nvim_buf_set_lines(win.buf, 0, -1, false, lines)
+    
 end
 
 function M.show_results(errors, success_count, total, operation)
