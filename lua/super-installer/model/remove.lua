@@ -26,11 +26,10 @@ function M.start(config)
 
     local function remove_next_plugin(index)
         if index > total then
-            -- 所有插件卸载完成，更新进度条到 100%
             ui.update_progress(progress_win, "Removing: Completed", total, total)
-            -- 关闭进度窗口
+
             vim.api.nvim_win_close(progress_win.win_id, true)
-            -- 打开结果窗口
+
             ui.show_results(errors, success_count, total, "Removal")
             return
         end

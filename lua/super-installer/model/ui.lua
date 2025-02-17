@@ -17,15 +17,15 @@ end
 
 function M.update_progress(win, text, completed, total)
     local progress_percentage = math.floor((completed / total) * 100)
-    local bar_length = 50
+    local bar_length = 60
     local filled_length = math.floor((progress_percentage / 100) * bar_length)
-    local progress_bar = string.rep("=", filled_length) .. string.rep(" ", bar_length - filled_length)
+    local progress_bar = string.rep("-", filled_length) .. string.rep(" ", bar_length - filled_length)
     local status_text = string.format("%d/%d (%d%%)", completed, total, progress_percentage)
 
     local lines = {
         text,
         status_text,
-        "[" .. progress_bar .. "]"
+        "·" .. progress_bar
     }
     vim.api.nvim_buf_set_lines(win.buf, 0, -1, false, lines)
 end
