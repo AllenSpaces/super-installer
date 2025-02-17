@@ -21,41 +21,54 @@ function M.start(config)
 
     local total = #to_remove
     local errors = {}
-    local success_count = 0  -- 声明并初始化成功卸载数量
+    local success_count = 0
+    local progress_win = ui.create_window("Removing Plugins...", 4, 50)
 
-    local win = ui.create_window("Removing Plugins...", 4, 50)
-
-    for i, plugin in ipairs(to_remove) do
-        ui.update_progress(win, "Removing: " .. plugin, i, total)
-        local ok, err = M.remove_plugin(plugin)
-        if ok then
-            success_count = success_count + 1
-        else
-            table.insert(errors, {plugin = plugin, error = err})
+    local function remove_next_plugin(index)
+        if index > total then
+            -- 所有插件卸载完成，更新进度条到 100%
+            ui.update_progress(progress_win, "Removing: Completed", total, total)
+            -- 关闭进度窗口
+            vim.api.nvim_win_close(progress_win.win_id, true)
+            -- 打开结果窗口
+            ui.show_results(errors, success_count, total, "Removal")
+            return
         end
+        local plugin = to_remove[index]
+        ui.update_progress(progress_win, "Removing: " .. plugin, index - 1, total)
+        M.remove_plugin(plugin, function(ok, err)
+            if ok then
+                success_count = success_count + 1
+            else
+                table.insert(errors, {plugin = plugin, error = err})
+            end
+            remove_next_plugin(index + 1)
+        end)
     end
-    -- 确保最后显示 100% 进度
-    ui.update_progress(win, "Removing: Completed", total, total)
 
-    vim.api.nvim_win_close(win.win_id, true)
-    ui.show_results(errors, success_count, total, "Removal")
+    remove_next_plugin(1)
 end
 
-function M.remove_plugin(plugin_name)
+function M.remove_plugin(plugin_name, callback)
     local install_dir = vim.fn.stdpath("data") .. "/site/pack/packer/start/" .. plugin_name
 
     if vim.fn.isdirectory(install_dir) ~= 1 then
-        return true
+        callback(true)
+        return
     end
 
-    local cmd = string.format("rm -rf %s 2>&1", install_dir)
-    local result = vim.fn.system(cmd)
-
-    if vim.v.shell_error ~= 0 then
-        return false, result:gsub("\n", " "):sub(1, 50) .. "..."
-    end
-
-    return true
+    local cmd = string.format("rm -rf %s", install_dir)
+    vim.fn.jobstart(cmd, {
+        on_exit = function(_, exit_code)
+            if exit_code == 0 then
+                callback(true)
+            else
+                local result = vim.fn.system(cmd .. " 2>&1")
+                local error_msg = result:gsub("\n", " "):sub(1, 50) .. "..."
+                callback(false, error_msg)
+            end
+        end
+    })
 end
 
 return M
