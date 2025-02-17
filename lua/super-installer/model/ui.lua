@@ -27,8 +27,8 @@ function M.update_progress(win, text, completed, total)
         "·" .. progress_bar .. "· " .. string.format("%-".. width.."s", status_text),
     }
 
-    vim.api.nvim_buf_set_name(win.buf,text)
     vim.api.nvim_buf_set_lines(win.buf, 0, -1, false, lines)
+    vim.api.nvim_buf_set_name(win.buf,text)
     vim.api.nvim_buf_set_keymap(win.buf, 'n', 'q', '<cmd>q!<CR>', {noremap = true, silent = true})
 end
 
