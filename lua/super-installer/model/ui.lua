@@ -16,7 +16,7 @@ function M.create_window(title, height, width)
 end
 
 function M.update_progress(win, text, completed, total)
-    local height = math.min(#content + 2, 15)
+    local height = math.min(#text + 2, 15)
     local width = 60
     local win = M.create_window("Installing ...", height, width)
     local progress_percentage = math.floor((completed / total) * 100)
