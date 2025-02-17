@@ -11,8 +11,6 @@ function M.start(config)
     local success_count = 0
     local win = ui.create_window("Installing Plugins...", 4, 50)
 
-    print("Window created with win_id: " .. win_id)
-
     for i, plugin in ipairs(plugins) do
         print("Updating progress for plugin: " .. plugin .. ", index: " .. i .. ", total: " .. total)
         ui.update_progress(win, "Installing: " .. plugin, i - 1, total)
