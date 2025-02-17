@@ -33,7 +33,7 @@ function M.install_plugin(plugin, git_type)
         repo_url = string.format("https://github.com/%s.git", plugin)
     end
 
-    local install_dir = vim.fn.stdpath("data") .. "/site/pack/super-installer/start/" .. plugin:match("/([^/]+)$")
+    local install_dir = vim.fn.stdpath("data") .. "/site/pack/packer/start/" .. plugin:match("/([^/]+)$")
 
     if vim.fn.isdirectory(install_dir) == 1 then
         local pull_cmd = string.format("cd %s && git pull 2>&1", install_dir)

@@ -39,7 +39,7 @@ function M.start(config)
 end
 
 function M.remove_plugin(plugin_name)
-    local install_dir = vim.fn.stdpath("data") .. "/site/pack/super-installer/start/" .. plugin_name
+    local install_dir = vim.fn.stdpath("data") .. "/site/pack/packer/start/" .. plugin_name
 
     if vim.fn.isdirectory(install_dir) ~= 1 then
         return true
