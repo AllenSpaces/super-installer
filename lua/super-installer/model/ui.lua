@@ -15,14 +15,17 @@ function M.create_window(title, height, width)
     return {win_id = win_id, buf = buf}
 end
 
-function M.update_progress(win, text, progress, total)
-    local progress_percent = math.floor((progress / total) * 100)
-    local progress_bar = string.format("[%-50s] %d%%", string.rep("=", math.floor(progress_percent / 2)), progress_percent)
+function M.update_progress(win, text, completed, total)
+    local progress_percentage = math.floor((completed / total) * 100)
+    local bar_length = 50
+    local filled_length = math.floor((progress_percentage / 100) * bar_length)
+    local progress_bar = string.rep("=", filled_length) .. string.rep(" ", bar_length - filled_length)
+    local status_text = string.format("%d/%d (%d%%)", completed, total, progress_percentage)
+
     local lines = {
         text,
-        "",
-        progress_bar,
-        string.format("Processing: %d/%d", progress, total)
+        status_text,
+        "[" .. progress_bar .. "]"
     }
     vim.api.nvim_buf_set_lines(win.buf, 0, -1, false, lines)
 end

@@ -12,7 +12,7 @@ function M.start(config)
     local win = ui.create_window("Installing Plugins...", 4, 50)
 
     for i, plugin in ipairs(plugins) do
-        ui.update_progress(win, "Installing: " .. plugin, i, total)
+        ui.update_progress(win, "Installing: " .. plugin, i - 1, total)
         local ok, err = M.install_plugin(plugin, config.git)
         if ok then
             success_count = success_count + 1
@@ -20,6 +20,8 @@ function M.start(config)
             table.insert(errors, {plugin = plugin, error = err})
         end
     end
+    -- 确保最后显示 100% 进度
+    ui.update_progress(win, "Installing: Completed", total, total)
 
     vim.api.nvim_win_close(win.win_id, true)
     ui.show_results(errors, success_count, total, "Installation")
