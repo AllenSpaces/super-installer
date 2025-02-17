@@ -8,7 +8,7 @@ function M.start(config)
         used_plugins[plugin:match("/([^/]+)$")] = true
     end
 
-    local install_dir = vim.fn.stdpath("data") .. "/site/pack/super-installer/start/"
+    local install_dir = vim.fn.stdpath("data") .. "/site/pack/packer/start/"
     local installed_plugins = vim.split(vim.fn.glob(install_dir .. "/*"), "\n")
     local to_remove = {}
 
