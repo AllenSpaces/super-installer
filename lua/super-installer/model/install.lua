@@ -36,14 +36,17 @@ function M.install_plugin(plugin, git_type)
     local install_dir = vim.fn.stdpath("data") .. "/site/pack/super-installer/start/" .. plugin:match("/([^/]+)$")
 
     if vim.fn.isdirectory(install_dir) == 1 then
-        return true
-    end
-
-    local cmd = string.format("git clone --depth 1 %s %s 2>&1", repo_url, install_dir)
-    local result = vim.fn.system(cmd)
-    
-    if vim.v.shell_error ~= 0 then
-        return false, result:gsub("\n", " "):sub(1, 50) .. "..."
+        local pull_cmd = string.format("cd %s && git pull 2>&1", install_dir)
+        local pull_result = vim.fn.system(pull_cmd)
+        if vim.v.shell_error ~= 0 then
+            return false, pull_result:gsub("\n", " "):sub(1, 50) .. "..."
+        end
+    else
+        local clone_cmd = string.format("git clone --depth 1 %s %s 2>&1", repo_url, install_dir)
+        local clone_result = vim.fn.system(clone_cmd)
+        if vim.v.shell_error ~= 0 then
+            return false, clone_result:gsub("\n", " "):sub(1, 50) .. "..."
+        end
     end
     return true
 end
