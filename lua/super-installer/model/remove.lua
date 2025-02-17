@@ -40,11 +40,11 @@ end
 
 function M.remove_plugin(plugin_name)
     local install_dir = vim.fn.stdpath("data") .. "/site/pack/super-installer/start/" .. plugin_name
-    -- 判断本地仓库目录是否存在
+
     if vim.fn.isdirectory(install_dir) ~= 1 then
-        -- 目录不存在，不做操作，直接返回成功
         return true
     end
+
     local cmd = string.format("rm -rf %s 2>&1", install_dir)
     local result = vim.fn.system(cmd)
 
