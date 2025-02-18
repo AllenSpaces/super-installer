@@ -57,7 +57,7 @@ function M.create_window(title, content_lines)
             title_pos = "center",
         }
 	elseif type(content_lines) == "number" then
-        content_lines = { " " * content_lines }
+        content_lines = { string.rep(" ", content_lines) }
         local dim = M.calculate_dimensions(content_lines, #title)
         win_config = {
             relative = "editor",
