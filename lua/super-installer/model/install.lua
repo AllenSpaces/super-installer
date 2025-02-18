@@ -29,7 +29,6 @@ function M.start(config)
     local function install_next_plugin(index)
         if is_installation_aborted then
             ui.log_message("Plugin installation aborted by user.")
-            is_installation_aborted = false
             return
         end
 
@@ -52,6 +51,7 @@ function M.start(config)
     end
 
     install_next_plugin(1)
+    is_installation_aborted = false
 end
 
 function M.install_plugin(plugin, git_type, callback)
