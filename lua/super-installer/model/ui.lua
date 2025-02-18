@@ -50,20 +50,12 @@ function M.create_window(title, content_lines)
 		content_lines = { content_lines }
         dim = M.calculate_dimensions(content_lines, #title)
 
-        local non_empty_count = 0
-
-        for _, line in ipairs(content_lines) do
-            if line == "" then
-                non_empty_count = non_empty_count + 1
-            end
-        end
-
         win_config = {
             relative = "editor",
             width = dim.width,
             height = dim.height,
             col = math.floor((vim.o.columns - dim.width) / 2),
-            row = math.floor((vim.o.lines - dim.height) / 2 + non_empty_count),
+            row = math.floor((vim.o.lines - dim.height) / 2),
             style = "minimal",
             border = "rounded",
             title = title,
@@ -77,7 +69,7 @@ function M.create_window(title, content_lines)
             width = dim.width,
             height = dim.height,
             col = math.floor((vim.o.columns - dim.width) / 2),
-            row = math.floor((vim.o.lines - dim.height) / 2 + 4),
+            row = math.floor((vim.o.lines - dim.height) / 2),
             style = "minimal",
             border = "rounded",
             title = title,
@@ -108,7 +100,7 @@ function M.show_results(errors, success_count, total, operation)
 		table.insert(content, center_text("Errors (" .. #errors .. "):", 80))
 		for i, e in ipairs(errors) do
 			table.insert(content, center_text(string.format("%d. %s: %s", i, e.plugin, e.error), 80))
-			if i >= 5 then
+			if i >= 8 then
 				table.insert(content, center_text("... (truncated)", 80))
 				break
 			end
