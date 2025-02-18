@@ -44,7 +44,7 @@ end
 function M.create_window(title, content_lines)
 	if type(content_lines) == "string" then
 		content_lines = { content_lines }
-        local dim = M.calculate_dimensions(content_lines, #title)
+        dim = M.calculate_dimensions(content_lines, #title)
         win_config = {
             relative = "editor",
             width = dim.width,
@@ -58,10 +58,10 @@ function M.create_window(title, content_lines)
         }
 	elseif type(content_lines) == "number" then
         content_lines = { string.rep(" ", content_lines) }
-        local dim = M.calculate_dimensions(content_lines, #title)
+        dim = M.calculate_dimensions(content_lines, #title)
         win_config = {
             relative = "editor",
-            width = 80,
+            width = dim.width,
             height = dim.height,
             col = math.floor((vim.o.columns - dim.width) / 2),
             row = math.floor((vim.o.lines - dim.height) / 2 - 2),

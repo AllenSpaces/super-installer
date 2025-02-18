@@ -14,7 +14,7 @@ function M.start(config)
     local total = #plugins
     local errors = {}
     local success_count = 0
-    local progress_win = ui.create_window("Installing Plugins", 110)
+    local progress_win = ui.create_window("Installing Plugins", 80)
 
     local function install_next_plugin(index)
         if index > total then
