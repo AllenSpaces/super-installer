@@ -34,13 +34,13 @@ function M.update_progress(win, text, completed, total)
 		.. string.format("%d/%d (%d%%)", completed, total, math.floor(progress * 100))
 
 	vim.api.nvim_buf_set_lines(win.buf, 0, -1, false, {
-        "",
-        center_text(text,65),
-        "",
-        center_text("Press 'q' to cease the operation",65),
-        "",
+		"",
+		center_text(text, 65),
+		"",
+		center_text("Press 'q' to cease the operation", 65),
+		"",
 		center_text(progress_bar, 65),
-        ""
+		"",
 	})
 	vim.api.nvim_buf_set_keymap(win.buf, "n", "q", "<cmd>q!<CR>", { noremap = true, silent = true })
 end
@@ -48,33 +48,33 @@ end
 function M.create_window(title, content_lines)
 	if type(content_lines) == "string" then
 		content_lines = { content_lines }
-        dim = M.calculate_dimensions(content_lines, #title)
+		dim = M.calculate_dimensions(content_lines, #title)
 
-        win_config = {
-            relative = "editor",
-            width = dim.width,
-            height = dim.height,
-            col = math.floor((vim.o.columns - dim.width) / 2),
-            row = math.floor((vim.o.lines - dim.height) / 2),
-            style = "minimal",
-            border = "rounded",
-            title = title,
-            title_pos = "center",
-        }
+		win_config = {
+			relative = "editor",
+			width = dim.width,
+			height = dim.height,
+			col = math.floor((vim.o.columns - dim.width) / 2),
+			row = math.floor((vim.o.lines - dim.height) / 2),
+			style = "minimal",
+			border = "rounded",
+			title = title,
+			title_pos = "center",
+		}
 	elseif type(content_lines) == "number" then
-        content_lines = { string.rep(" ", content_lines) }
-        dim = M.calculate_dimensions(content_lines, #title)
-        win_config = {
-            relative = "editor",
-            width = dim.width,
-            height = dim.height,
-            col = math.floor((vim.o.columns - dim.width) / 2),
-            row = math.floor((vim.o.lines - dim.height) / 2),
-            style = "minimal",
-            border = "rounded",
-            title = title,
-            title_pos = "center",
-        }
+		content_lines = { string.rep(" ", content_lines) }
+		dim = M.calculate_dimensions(content_lines, #title)
+		win_config = {
+			relative = "editor",
+			width = dim.width,
+			height = dim.height,
+			col = math.floor((vim.o.columns - dim.width) / 2),
+			row = math.floor((vim.o.lines - dim.height) / 2),
+			style = "minimal",
+			border = "rounded",
+			title = title,
+			title_pos = "center",
+		}
 	end
 
 	if M.win_cache and vim.api.nvim_win_is_valid(M.win_cache.win_id) then
@@ -93,7 +93,7 @@ function M.show_results(errors, success_count, total, operation)
 	local content = {
 		"",
 		center_text(operation .. " Results (" .. success_count .. "/" .. total .. " successful)", 65),
-		""
+		"",
 	}
 
 	if #errors > 0 then
