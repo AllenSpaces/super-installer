@@ -37,14 +37,14 @@ function M.start(config)
 		end
 
 		if index > total then
-			ui.update_progress(progress_win, "Installing: Completed", total, total, config.progress.icon)
+			ui.update_progress(progress_win, "Installing: Completed", total, total, config.ui.progress.icon)
 			vim.api.nvim_win_close(progress_win.win_id, true)
 			ui.show_results(errors, success_count, total, "Installation")
 			return
 		end
 
 		local plugin = plugins[index]
-		ui.update_progress(progress_win, "Installing: " .. plugin, index - 1, total, config.progress.icon)
+		ui.update_progress(progress_win, "Installing: " .. plugin, index - 1, total, config.ui.progress.icon)
 		M.install_plugin(plugin, config.git, function(ok, err)
 			if ok then
 				success_count = success_count + 1

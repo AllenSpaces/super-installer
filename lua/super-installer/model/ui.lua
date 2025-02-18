@@ -27,10 +27,10 @@ function M.update_progress(win, text, completed, total, icon)
 	local progress = completed / total
 	local filled = math.floor(FIXED_BAR_WIDTH * progress)
 
-	local progress_bar = "["
+	local progress_bar = ""
 		.. string.rep(icon, filled)
 		.. string.rep(" ", FIXED_BAR_WIDTH - filled)
-		.. "] "
+		.. " "
 		.. string.format("%d/%d (%d%%)", completed, total, math.floor(progress * 100))
 
 	vim.api.nvim_buf_set_lines(win.buf, 0, -1, false, {

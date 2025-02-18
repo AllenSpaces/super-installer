@@ -38,13 +38,13 @@ function M.start(config)
 
 	local function remove_next_plugin(index)
 		if index > total then
-			ui.update_progress(progress_win, "Removing: Completed", total, total, config.progress.icon)
+			ui.update_progress(progress_win, "Removing: Completed", total, total, config.ui.progress.icon)
 			vim.api.nvim_win_close(progress_win.win_id, true)
 			ui.show_results(errors, success_count, total, "Removal")
 			return
 		end
 		local plugin = to_remove[index]
-		ui.update_progress(progress_win, "Removing: " .. plugin, index - 1, total, config.progress.icon)
+		ui.update_progress(progress_win, "Removing: " .. plugin, index - 1, total, config.ui.progress.icon)
 		M.remove_plugin(plugin, function(ok, err)
 			if ok then
 				success_count = success_count + 1
