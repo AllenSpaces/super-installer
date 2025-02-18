@@ -1,18 +1,18 @@
 # Super Installer
 
-Super Installer is a Neovim plugin designed to simplify the process of installing, removing, and updating Neovim plugins. It provides a user - friendly UI to show the progress and error messages during these operations.
+Super Installer is a Neovim plugin designed to simplify the process of installing, removing, and updating Neovim plugins. It provides a user-friendly UI to show the progress and error messages during these operations.
 
 ## Installation
 
 ### Mac
 
 ```shell
-git clone https://github.com/wukuohao2003/super-installer ～/.local/share/nvim/site/pack/packer/start
+git clone https://github.com/wukuohao2003/super-installer ~/.local/share/nvim/site/pack/packer/start
 ```
 
 ### Windows
 ```shell
-git clone https://github.com/wukuohao2003/super-installer "$env:LOCALAPPDATA\nvim-data\site\pack\packer\start"
+git clone https://github.com/wukuohao2003/super-installer "$env:LOCALAPPDATA\nvim-data\site\pack/packer/start"
 ```
 
 ## Configuration
