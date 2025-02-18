@@ -1,11 +1,13 @@
 local M = {}
 
+-- 辅助函数：将文本居中
 local function center_text(text, width)
     local padding = math.max(0, width - #text)
     local left = math.floor(padding / 2)
     return string.rep(" ", left) .. text .. string.rep(" ", padding - left)
 end
 
+-- 计算窗口的宽度和高度
 function M.calculate_dimensions(content_lines, min_width)
     assert(type(content_lines) == "table", "content_lines must be table (got "..type(content_lines)..")")
     
@@ -22,20 +24,24 @@ function M.calculate_dimensions(content_lines, min_width)
     }
 end
 
+-- 更新进度条
 function M.update_progress(win, text, completed, total)
-    local FIXED_BAR_WIDTH = 50  
+    local FIXED_BAR_WIDTH = 40 
     local progress = completed / total
     local filled = math.floor(FIXED_BAR_WIDTH * progress)
     
-    local progress_bar = "["..string.rep("=", filled)..string.rep(" ", FIXED_BAR_WIDTH-filled).."]"
-    local status_text = string.format("%d/%d (%d%%)", completed, total, math.floor(progress*100))
+    local progress_bar = "["
+        .. string.rep("=", filled)
+        .. string.rep(" ", FIXED_BAR_WIDTH - filled)
+        .. "] "
+        .. string.format("%d/%d (%d%%)", completed, total, math.floor(progress * 100))
     
     vim.api.nvim_buf_set_lines(win.buf, 0, -1, false, {
-        center_text(progress_bar, FIXED_BAR_WIDTH + 4),
-        center_text(status_text, FIXED_BAR_WIDTH + 4)
+        center_text(progress_bar, FIXED_BAR_WIDTH + 20) 
     })
 end
 
+-- 创建窗口
 function M.create_window(title, content_lines)
     if type(content_lines) == "string" then
         content_lines = {content_lines}
@@ -48,15 +54,15 @@ function M.create_window(title, content_lines)
         relative = 'editor',
         width = dim.width,
         height = dim.height,
-        col = math.floor((vim.o.columns - dim.width)/2),  
-        row = math.floor((vim.o.lines - dim.height)/2 - 2), 
+        col = math.floor((vim.o.columns - dim.width) / 2),  
+        row = math.floor((vim.o.lines - dim.height) / 2 - 2), 
         style = 'minimal',
         border = 'rounded',
         title = center_text(title, dim.width - 4)  
     }
     
-    -- 窗口复用逻辑（新增）
-    if M.win_cache then
+    -- 窗口复用逻辑
+    if M.win_cache and vim.api.nvim_win_is_valid(M.win_cache.win_id) then
         vim.api.nvim_win_set_config(M.win_cache.win_id, win_config)
         vim.api.nvim_buf_set_lines(M.win_cache.buf, 0, -1, false, {})
         return M.win_cache
@@ -68,16 +74,17 @@ function M.create_window(title, content_lines)
     return M.win_cache
 end
 
+-- 显示结果
 function M.show_results(errors, success_count, total, operation)
     local content = {
-        center_text(operation.." Results ("..success_count.."/"..total.." successful)", 60),
+        center_text(operation .. " Results (" .. success_count .. "/" .. total .. " successful)", 60),
         ""
     }
     
     if #errors > 0 then
-        table.insert(content, center_text("Errors ("..#errors.."):", 60))
+        table.insert(content, center_text("Errors (" .. #errors .. "):", 60))
         for i, e in ipairs(errors) do
-            table.insert(content, string.format(" %d. %s: %s", i, e.plugin, e.error))
+            table.insert(content, center_text(string.format("%d. %s: %s", i, e.plugin, e.error), 60))
             if i >= 5 then  
                 table.insert(content, center_text("... (truncated)", 60))
                 break
@@ -90,9 +97,14 @@ function M.show_results(errors, success_count, total, operation)
     table.insert(content, "")
     table.insert(content, center_text("Press q to close", 60))
     
-    local win = M.create_window(operation.." Report", content)
+    local win = M.create_window(operation .. " Report", content)
     vim.api.nvim_buf_set_lines(win.buf, 0, -1, false, content)
+    vim.api.nvim_buf_set_keymap(win.buf, 'n', 'q', '<cmd>q!<CR>', {noremap = true, silent = true})
 end
 
+-- 日志记录函数
+function M.log_message(message)
+    vim.notify(message, vim.log.levels.INFO)
+end
 
 return M
