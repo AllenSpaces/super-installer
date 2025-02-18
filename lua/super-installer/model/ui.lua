@@ -22,7 +22,7 @@ function M.create_window(title, content_lines)
 end
 
 
-local function calculate_dimensions(content_lines, min_width)
+function M.calculate_dimensions(content_lines, min_width)
     local max_line_length = min_width or 0
     for _, line in ipairs(content_lines) do
         max_line_length = math.max(max_line_length, #line)
