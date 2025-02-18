@@ -36,6 +36,8 @@ function M.update_progress(win, text, completed, total)
 	vim.api.nvim_buf_set_lines(win.buf, 0, -1, false, {
         center_text(text,80),
         "",
+        "",
+        "Press 'q' to cease the operation",
 		center_text(progress_bar, 80),
 	})
 	vim.api.nvim_buf_set_keymap(win.buf, "n", "q", "<cmd>q!<CR>", { noremap = true, silent = true })
@@ -105,7 +107,7 @@ function M.show_results(errors, success_count, total, operation)
 	end
 
 	table.insert(content, "")
-	table.insert(content, center_text("Press q to close", 80))
+	table.insert(content, center_text("Press 'q' to quit", 80))
 
 	local win = M.create_window(operation .. " Report", content)
 	vim.api.nvim_buf_set_lines(win.buf, 0, -1, false, content)
