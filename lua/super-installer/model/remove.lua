@@ -7,12 +7,14 @@ function M.start(config)
 	local used_plugins = {}
     local plugins = config.install.use
     table.insert(plugins, 1, config.install.default)
+
 	for _, plugin in ipairs(plugins) do
-		used_plugins[plugin] = true
+		used_plugins[plugin:match("/([^/]+)$")] = true
 	end
 
-	local install_dir = vim.fn.stdpath("data") .. "/site/pack/packer/start/"
+	local install_dir = vim.fn.stdpath("data") .. "/site/pack/packer/start"
 	local installed_plugins = vim.split(vim.fn.glob(install_dir .. "/*"), "\n")
+
 	local to_remove = {}
 
 	for _, path in ipairs(installed_plugins) do

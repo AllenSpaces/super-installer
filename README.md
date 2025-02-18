@@ -10,7 +10,7 @@ Super Installer is a Neovim plugin designed to simplify the process of installin
 git clone https://github.com/wukuohao2003/super-installer ~/.local/share/nvim/site/pack/packer/start
 ```
 
-### Windows
+### Windows[Not currently supported]
 
 ```shell
 git clone https://github.com/wukuohao2003/super-installer "$env:LOCALAPPDATA\nvim-data\site\pack/packer/start"
