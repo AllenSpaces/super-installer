@@ -22,13 +22,13 @@ function M.calculate_dimensions(content_lines, min_width)
 	}
 end
 
-function M.update_progress(win, text, completed, total)
+function M.update_progress(win, text, completed, total, icon)
 	local FIXED_BAR_WIDTH = 50
 	local progress = completed / total
 	local filled = math.floor(FIXED_BAR_WIDTH * progress)
 
 	local progress_bar = "["
-		.. string.rep("=", filled)
+		.. string.rep(icon, filled)
 		.. string.rep(" ", FIXED_BAR_WIDTH - filled)
 		.. "] "
 		.. string.format("%d/%d (%d%%)", completed, total, math.floor(progress * 100))

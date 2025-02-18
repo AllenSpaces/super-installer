@@ -3,15 +3,23 @@ local M = {}
 M.setup = function(user_config)
 	local default_config = {
 		git = "ssh",
+
 		install = {
 			default = "wukuohao2003/super-installer",
 			use = {},
 		},
+
 		keymaps = {
 			install = "<leader>si",
 			remove = "<leader>sr",
 			update = "<leader>su",
 		},
+
+		ui = {
+			progress = {
+				icon = ""
+			}
+		}
 	}
 
 	M.config = vim.tbl_deep_extend("force", default_config, user_config or {})
