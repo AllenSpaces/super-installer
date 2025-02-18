@@ -40,6 +40,7 @@ function M.update_progress(win, text, completed, total)
         center_text("Press 'q' to cease the operation",80),
         "",
 		center_text(progress_bar, 80),
+        ""
 	})
 	vim.api.nvim_buf_set_keymap(win.buf, "n", "q", "<cmd>q!<CR>", { noremap = true, silent = true })
 end
