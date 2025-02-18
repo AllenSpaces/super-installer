@@ -5,8 +5,8 @@ local M = {}
 
 function M.start(config)
 	local used_plugins = {}
-    local plugins = {}
-    table.insert(config.install.use, 1, config.install.default)
+    local plugins = config.install.use
+    table.insert(plugins, 1, config.install.default)
 	for _, plugin in ipairs(plugins) do
 		used_plugins[plugin] = true
 	end
