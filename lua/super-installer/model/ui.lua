@@ -17,7 +17,7 @@ function M.calculate_dimensions(content_lines, min_width)
 	local screen_width = vim.o.columns
 	local max_width = math.floor(screen_width * 0.5)
 	return {
-		width = math.min(max_width, max_line_length + 4),
+		width = math.min(max_width, max_line_length),
 		height = math.min(20, #content_lines + 7),
 	}
 end
