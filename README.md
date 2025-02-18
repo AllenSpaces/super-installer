@@ -11,6 +11,7 @@ git clone https://github.com/wukuohao2003/super-installer ~/.local/share/nvim/si
 ```
 
 ### Windows
+
 ```shell
 git clone https://github.com/wukuohao2003/super-installer "$env:LOCALAPPDATA\nvim-data\site\pack/packer/start"
 ```
@@ -47,11 +48,13 @@ require('super-installer').setup({
 ### Configuration Options
 
 #### `git`
+
 - **Type**: String
 - **Default**: `"ssh"`
 - **Description**: Specifies the Git protocol to use for cloning repositories. Can be either `"ssh"` or `"https"`.
 
 #### `install`
+
 - **Type**: Table
   - **`use`**:
     - **Type**: Table of Strings
@@ -59,6 +62,7 @@ require('super-installer').setup({
     - **Description**: A list of additional plugins to install. Each plugin should be in the format `"{username}/{repo}"`.
 
 #### `keymaps`
+
 - **Type**: Table
   - **`install`**:
     - **Type**: String
@@ -76,41 +80,52 @@ require('super-installer').setup({
 ## Usage
 
 ### Installing Plugins
+
 - **Using Key Mapping**: Press the key mapping defined in `keymaps.install` (default: `<leader>si`) in normal mode.
 - **Using Command**: Run the `:SuperInstall` command in the Neovim command line.
 
 ### Removing Plugins
+
 - **Using Key Mapping**: Press the key mapping defined in `keymaps.remove` (default: `<leader>sr`) in normal mode.
 - **Using Command**: Run the `:SuperRemove` command in the Neovim command line. This will remove all plugins that are not defined in the `install` configuration.
 
 ### Updating Plugins
+
 - **Using Key Mapping**: Press the key mapping defined in `keymaps.update` (default: `<leader>su`) in normal mode.
 - **Using Command**: Run the `:SuperUpdate` command in the Neovim command line. This will update all the plugins defined in the `install` configuration.
 
 ## UI and Error Handling
 
 ### Progress UI
+
 During the installation, removal, or update process, a floating window will appear, showing the name of the plugin being processed and a simple progress bar.
 
 ### Error Handling
+
 If any errors occur during the process, a new floating window will appear after the process is completed. This window will list all the plugins that failed to install, remove, or update, along with the corresponding error messages. You can close this window by pressing the `q` key.
 
 ## Troubleshooting
 
 ### Permission Issues
+
 Make sure Neovim has the necessary permissions to create, modify, and delete files in the `stdpath('data')/site/pack/plugins/start/` directory. You can change the directory permissions if needed.
 
 ### Network Issues
+
 If you encounter problems during the installation or update process, check your network connection and make sure you can access the GitHub repositories. You can try to ping `github.com` to test the network connectivity.
 
 ### HTTP/2 Issues
+
 If you get an error related to the HTTP/2 framing layer, you can try to disable HTTP/2 in Git by running the following command:
+
 ```bash
 git config --global http.version HTTP/1.1
 ```
 
 ## Contributing
+
 If you want to contribute to the Super Installer plugin, feel free to submit issues or pull requests on the GitHub repository.
 
 ## License
+
 This plugin is released under the [Your License Name] license. See the `LICENSE` file in the repository for more details.
