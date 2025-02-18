@@ -16,7 +16,7 @@ end
 
 function M.get_install_dir(plugin, type)
 	if type ~= "install" then
-        return vim.fn.stdpath("data") .. "/site/pack/packer/opt/" .. plugin
+        return vim.fn.stdpath("data") .. "/site/pack/packer/start/" .. plugin
     else
 	    return vim.fn.stdpath("data") .. "/site/pack/packer/start/" .. plugin:match("/([^/]+)$")
     end
