@@ -34,9 +34,9 @@ function M.update_progress(win, text, completed, total)
 		.. string.format("%d/%d (%d%%)", completed, total, math.floor(progress * 100))
 
 	vim.api.nvim_buf_set_lines(win.buf, 0, -1, false, {
-        "Installing" .. " " .. text,
+        center_text("Installing" .. " " .. text,110),
         "",
-		center_text(progress_bar, FIXED_BAR_WIDTH + 20),
+		center_text(progress_bar, 110),
 	})
 	vim.api.nvim_buf_set_keymap(win.buf, "n", "q", "<cmd>q!<CR>", { noremap = true, silent = true })
 end
@@ -87,25 +87,25 @@ end
 function M.show_results(errors, success_count, total, operation)
 	local content = {
 		"",
-		center_text(operation .. " Results (" .. success_count .. "/" .. total .. " successful)", 60),
+		center_text(operation .. " Results (" .. success_count .. "/" .. total .. " successful)", 110),
 		""
 	}
 
 	if #errors > 0 then
-		table.insert(content, center_text("Errors (" .. #errors .. "):", 60))
+		table.insert(content, center_text("Errors (" .. #errors .. "):", 110))
 		for i, e in ipairs(errors) do
-			table.insert(content, center_text(string.format("%d. %s: %s", i, e.plugin, e.error), 60))
+			table.insert(content, center_text(string.format("%d. %s: %s", i, e.plugin, e.error), 110))
 			if i >= 5 then
-				table.insert(content, center_text("... (truncated)", 60))
+				table.insert(content, center_text("... (truncated)", 110))
 				break
 			end
 		end
 	else
-		table.insert(content, center_text("✓ All operations completed successfully!", 60))
+		table.insert(content, center_text("✓ All operations completed successfully!", 110))
 	end
 
 	table.insert(content, "")
-	table.insert(content, center_text("Press q to close", 60))
+	table.insert(content, center_text("Press q to close", 110))
 
 	local win = M.create_window(operation .. " Report", content)
 	vim.api.nvim_buf_set_lines(win.buf, 0, -1, false, content)
