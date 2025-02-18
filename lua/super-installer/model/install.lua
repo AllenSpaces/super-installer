@@ -1,38 +1,11 @@
 local ui = require("super-installer.model.ui")
+local utils = require("super-installer.model.utils")
 
 local M = {}
 
--- 获取仓库 URL
-local function get_repo_url(plugin, git_type)
-    if git_type == "ssh" then
-        return string.format("git@github.com:%s.git", plugin)
-    else
-        return string.format("https://github.com/%s.git", plugin)
-    end
-end
-
--- 获取安装目录
-local function get_install_dir(plugin)
-    return vim.fn.stdpath("data") .. "/site/pack/packer/start/" .. plugin:match("/([^/]+)$")
-end
-
--- 执行命令并处理结果
-local function execute_command(cmd, callback)
-    vim.fn.jobstart(cmd, {
-        on_exit = function(_, exit_code)
-            if exit_code == 0 then
-                callback(true)
-            else
-                local result = vim.fn.system(cmd .. " 2>&1")
-                local error_msg = result:gsub("\n", " "):sub(1, 50) .. "..."
-                callback(false, error_msg)
-            end
-        end
-    })
-end
-
 function M.start(config)
     local plugins = config.install.use
+
     if #plugins == 0 then
         ui.log_message("No plugins to install.")
         return
@@ -55,10 +28,8 @@ function M.start(config)
         M.install_plugin(plugin, config.git, function(ok, err)
             if ok then
                 success_count = success_count + 1
-                ui.log_message("Successfully installed: " .. plugin)
             else
                 table.insert(errors, {plugin = plugin, error = err})
-                ui.log_message("Failed to install: " .. plugin .. " - " .. err)
             end
             install_next_plugin(index + 1)
         end)
@@ -68,8 +39,8 @@ function M.start(config)
 end
 
 function M.install_plugin(plugin, git_type, callback)
-    local repo_url = get_repo_url(plugin, git_type)
-    local install_dir = get_install_dir(plugin)
+    local repo_url = utils.get_repo_url(plugin, git_type)
+    local install_dir = utils.get_install_dir(plugin)
 
     local cmd
     if vim.fn.isdirectory(install_dir) == 1 then
@@ -78,7 +49,7 @@ function M.install_plugin(plugin, git_type, callback)
         cmd = string.format("git clone --depth 1 %s %s", repo_url, install_dir)
     end
 
-    execute_command(cmd, callback)
+    utils.execute_command(cmd, callback)
 end
 
 return M

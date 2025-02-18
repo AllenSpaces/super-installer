@@ -1,13 +1,11 @@
 local M = {}
 
--- 辅助函数：将文本居中
 local function center_text(text, width)
     local padding = math.max(0, width - #text)
     local left = math.floor(padding / 2)
     return string.rep(" ", left) .. text .. string.rep(" ", padding - left)
 end
 
--- 计算窗口的宽度和高度
 function M.calculate_dimensions(content_lines, min_width)
     assert(type(content_lines) == "table", "content_lines must be table (got "..type(content_lines)..")")
     
@@ -24,9 +22,8 @@ function M.calculate_dimensions(content_lines, min_width)
     }
 end
 
--- 更新进度条
 function M.update_progress(win, text, completed, total)
-    local FIXED_BAR_WIDTH = 40 
+    local FIXED_BAR_WIDTH = 100 
     local progress = completed / total
     local filled = math.floor(FIXED_BAR_WIDTH * progress)
     
@@ -41,7 +38,6 @@ function M.update_progress(win, text, completed, total)
     })
 end
 
--- 创建窗口
 function M.create_window(title, content_lines)
     if type(content_lines) == "string" then
         content_lines = {content_lines}
@@ -58,10 +54,9 @@ function M.create_window(title, content_lines)
         row = math.floor((vim.o.lines - dim.height) / 2 - 2), 
         style = 'minimal',
         border = 'rounded',
-        title = center_text(title, dim.width - 4)  
+        title = title  
     }
     
-    -- 窗口复用逻辑
     if M.win_cache and vim.api.nvim_win_is_valid(M.win_cache.win_id) then
         vim.api.nvim_win_set_config(M.win_cache.win_id, win_config)
         vim.api.nvim_buf_set_lines(M.win_cache.buf, 0, -1, false, {})
@@ -74,9 +69,9 @@ function M.create_window(title, content_lines)
     return M.win_cache
 end
 
--- 显示结果
 function M.show_results(errors, success_count, total, operation)
     local content = {
+        "",
         center_text(operation .. " Results (" .. success_count .. "/" .. total .. " successful)", 60),
         ""
     }
