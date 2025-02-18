@@ -61,7 +61,7 @@ function M.create_window(title, content_lines)
         local dim = M.calculate_dimensions(content_lines, #title)
         win_config = {
             relative = "editor",
-            width = 110,
+            width = 80,
             height = dim.height,
             col = math.floor((vim.o.columns - dim.width) / 2),
             row = math.floor((vim.o.lines - dim.height) / 2 - 2),
