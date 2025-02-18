@@ -100,7 +100,7 @@ function M.show_results(errors, success_count, total, operation)
 		table.insert(content, center_text("Errors (" .. #errors .. "):", 80))
 		for i, e in ipairs(errors) do
 			table.insert(content, center_text(string.format("%d. %s: %s", i, e.plugin, e.error), 80))
-			if i >= 8 then
+			if i >= 10 then
 				table.insert(content, center_text("... (truncated)", 80))
 				break
 			end
