@@ -36,6 +36,7 @@ function M.update_progress(win, text, completed, total)
     vim.api.nvim_buf_set_lines(win.buf, 0, -1, false, {
         center_text(progress_bar, FIXED_BAR_WIDTH + 20) 
     })
+    vim.api.nvim_buf_set_keymap(win.buf, 'n', 'q', '<cmd>q!<CR>', {noremap = true, silent = true})
 end
 
 function M.create_window(title, content_lines)
