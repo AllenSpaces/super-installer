@@ -44,7 +44,7 @@ end
 function M.create_window(title, content_lines)
 	if type(content_lines) == "string" then
 		content_lines = { content_lines }
-
+        local dim = M.calculate_dimensions(content_lines, #title)
         win_config = {
             relative = "editor",
             width = dim.width,
@@ -58,7 +58,7 @@ function M.create_window(title, content_lines)
         }
 	elseif type(content_lines) == "number" then
         content_lines = { " " * content_lines }
-
+        local dim = M.calculate_dimensions(content_lines, #title)
         win_config = {
             relative = "editor",
             width = 110,
@@ -71,8 +71,6 @@ function M.create_window(title, content_lines)
             title_pos = "center",
         }
 	end
-
-	local dim = M.calculate_dimensions(content_lines, #title)
 
 	if M.win_cache and vim.api.nvim_win_is_valid(M.win_cache.win_id) then
 		vim.api.nvim_win_set_config(M.win_cache.win_id, win_config)
