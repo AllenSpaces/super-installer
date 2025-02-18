@@ -3,6 +3,8 @@ local utils = require("super-installer.model.utils")
 
 local M = {}
 
+local is_installation_aborted = false
+
 function M.start(config)
     local plugins = config.install.use
 
@@ -16,7 +18,19 @@ function M.start(config)
     local success_count = 0
     local progress_win = ui.create_window("Installing Plugins", 80)
 
+    vim.api.nvim_create_autocmd("WinClosed", {
+        buffer = progress_win.buf,
+        callback = function()
+            is_installation_aborted = true
+        end
+    })
+
     local function install_next_plugin(index)
+        if is_installation_aborted then
+            ui.log_message("Plugin installation aborted by user.")
+            return
+        end
+
         if index > total then
             ui.update_progress(progress_win, "Installing: Completed", total, total)
             vim.api.nvim_win_close(progress_win.win_id, true)
@@ -39,6 +53,10 @@ function M.start(config)
 end
 
 function M.install_plugin(plugin, git_type, callback)
+    if is_installation_aborted then
+        return
+    end
+
     local repo_url = utils.get_repo_url(plugin, git_type)
     local install_dir = utils.get_install_dir(plugin)
 
