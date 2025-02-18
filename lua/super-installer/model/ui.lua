@@ -1,5 +1,12 @@
 local M = {}
 
+local function center_text(text, width)
+    local padding = math.max(0, width - #text)
+    local left_padding = math.floor(padding / 2)
+    local right_padding = padding - left_padding
+    return string.rep(" ", left_padding) .. text .. string.rep(" ", right_padding)
+end
+
 function M.create_window(title, height, width)
     local buf = vim.api.nvim_create_buf(false, true)
     local win_id = vim.api.nvim_open_win(buf, true, {
@@ -11,7 +18,9 @@ function M.create_window(title, height, width)
         style = 'minimal',
         border = 'rounded'
     })
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, {title})
+
+    local centered_title = center_text(title, width - 2) 
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, {centered_title})
     return {win_id = win_id, buf = buf}
 end
 
@@ -27,8 +36,14 @@ function M.update_progress(win, text, completed, total)
         "·" .. progress_bar .. "· " .. string.format("%-".. width.."s", status_text),
     }
 
-    vim.api.nvim_buf_set_lines(win.buf, 0, -1, false, lines)
-    vim.api.nvim_buf_set_name(win.buf,text)
+    -- 使进度条内容居中
+    local centered_lines = {}
+    for _, line in ipairs(lines) do
+        table.insert(centered_lines, center_text(line, width))
+    end
+
+    vim.api.nvim_buf_set_lines(win.buf, 0, -1, false, centered_lines)
+    vim.api.nvim_buf_set_name(win.buf, text)
     vim.api.nvim_buf_set_keymap(win.buf, 'n', 'q', '<cmd>q!<CR>', {noremap = true, silent = true})
 end
 
@@ -48,10 +63,16 @@ function M.show_results(errors, success_count, total, operation)
     table.insert(content, "")
     table.insert(content, "Press q to close")
 
-    local height = math.min(#content + 2, 15)
+    local height = #content + 2
     local width = 60
+
+    local centered_content = {}
+    for _, line in ipairs(content) do
+        table.insert(centered_content, center_text(line, width - 2))
+    end
+
     local win = M.create_window(operation .. " Results", height, width)
-    vim.api.nvim_buf_set_lines(win.buf, 0, -1, false, content)
+    vim.api.nvim_buf_set_lines(win.buf, 0, -1, false, centered_content)
     vim.api.nvim_buf_set_keymap(win.buf, 'n', 'q', '<cmd>q!<CR>', {noremap = true, silent = true})
 end
 
