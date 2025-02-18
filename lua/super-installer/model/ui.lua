@@ -34,10 +34,11 @@ function M.update_progress(win, text, completed, total)
 		.. string.format("%d/%d (%d%%)", completed, total, math.floor(progress * 100))
 
 	vim.api.nvim_buf_set_lines(win.buf, 0, -1, false, {
+        "",
         center_text(text,80),
         "",
+        center_text("Press 'q' to cease the operation",80),
         "",
-        "Press 'q' to cease the operation",
 		center_text(progress_bar, 80),
 	})
 	vim.api.nvim_buf_set_keymap(win.buf, "n", "q", "<cmd>q!<CR>", { noremap = true, silent = true })
