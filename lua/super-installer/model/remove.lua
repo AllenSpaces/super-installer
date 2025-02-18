@@ -18,7 +18,9 @@ function M.start(config)
 	for _, path in ipairs(installed_plugins) do
 		local plugin_name = vim.fn.fnamemodify(path, ":t")
 		if not used_plugins[plugin_name] then
-			table.insert(to_remove, plugin_name)
+			if plugin_name ~= "super-installer" then
+				table.insert(to_remove, plugin_name)
+			end
 		end
 	end
 
