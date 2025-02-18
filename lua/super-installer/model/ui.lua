@@ -49,12 +49,21 @@ function M.create_window(title, content_lines)
 	if type(content_lines) == "string" then
 		content_lines = { content_lines }
         dim = M.calculate_dimensions(content_lines, #title)
+
+        local non_empty_count = 0
+
+        for _, line in ipairs(content_lines) do
+            if line == "" then
+                non_empty_count = non_empty_count + 1
+            end
+        end
+
         win_config = {
             relative = "editor",
             width = dim.width,
             height = dim.height,
             col = math.floor((vim.o.columns - dim.width) / 2),
-            row = math.floor((vim.o.lines - dim.height) / 2),
+            row = math.floor((vim.o.lines - dim.height) / 2 + non_empty_count),
             style = "minimal",
             border = "rounded",
             title = title,
@@ -68,7 +77,7 @@ function M.create_window(title, content_lines)
             width = dim.width,
             height = dim.height,
             col = math.floor((vim.o.columns - dim.width) / 2),
-            row = math.floor((vim.o.lines - dim.height) / 2),
+            row = math.floor((vim.o.lines - dim.height) / 2 + 4),
             style = "minimal",
             border = "rounded",
             title = title,
