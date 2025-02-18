@@ -117,7 +117,6 @@ function M.show_results(errors, success_count, total, operation)
 	vim.api.nvim_buf_set_keymap(win.buf, "n", "q", "<cmd>q!<CR>", { noremap = true, silent = true })
 end
 
--- 日志记录函数
 function M.log_message(message)
 	vim.notify(message, vim.log.levels.INFO)
 end
