@@ -35,11 +35,11 @@ function M.update_progress(win, text, completed, total)
 
 	vim.api.nvim_buf_set_lines(win.buf, 0, -1, false, {
         "",
-        center_text(text,80),
+        center_text(text,70),
         "",
-        center_text("Press 'q' to cease the operation",80),
+        center_text("Press 'q' to cease the operation",70),
         "",
-		center_text(progress_bar, 80),
+		center_text(progress_bar, 70),
         ""
 	})
 	vim.api.nvim_buf_set_keymap(win.buf, "n", "q", "<cmd>q!<CR>", { noremap = true, silent = true })
@@ -92,25 +92,25 @@ end
 function M.show_results(errors, success_count, total, operation)
 	local content = {
 		"",
-		center_text(operation .. " Results (" .. success_count .. "/" .. total .. " successful)", 80),
+		center_text(operation .. " Results (" .. success_count .. "/" .. total .. " successful)", 70),
 		""
 	}
 
 	if #errors > 0 then
-		table.insert(content, center_text("Errors (" .. #errors .. "):", 80))
+		table.insert(content, center_text("Errors (" .. #errors .. "):", 70))
 		for i, e in ipairs(errors) do
-			table.insert(content, center_text(string.format("%d. %s: %s", i, e.plugin, e.error), 80))
+			table.insert(content, center_text(string.format("%d. %s: %s", i, e.plugin, e.error), 70))
 			if i >= 10 then
-				table.insert(content, center_text("... (truncated)", 80))
+				table.insert(content, center_text("... (truncated)", 70))
 				break
 			end
 		end
 	else
-		table.insert(content, center_text("✓ All operations completed successfully!", 80))
+		table.insert(content, center_text("✓ All operations completed successfully!", 70))
 	end
 
 	table.insert(content, "")
-	table.insert(content, center_text("Press 'q' to quit", 80))
+	table.insert(content, center_text("Press 'q' to quit", 70))
 
 	local win = M.create_window(operation .. " Report", content)
 	vim.api.nvim_buf_set_lines(win.buf, 0, -1, false, content)
