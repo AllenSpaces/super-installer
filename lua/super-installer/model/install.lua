@@ -7,7 +7,7 @@ local is_installation_aborted = false
 
 function M.start(config)
     local plugins = config.install.use
-    table.insert(temp_plugins,1,config.install.default)
+    table.insert(plugins,1,config.install.default)
 
     if #plugins == 0 then
         ui.log_message("No plugins to install.")
