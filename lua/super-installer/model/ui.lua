@@ -1,7 +1,24 @@
 local M = {}
 
+function M.calculate_dimensions(content_lines, min_width)
+    local max_line_length = min_width or 0
+    for _, line in ipairs(content_lines) do
+        max_line_length = math.max(max_line_length, #line)
+    end
+    
+    local screen_width = vim.o.columns
+    local screen_height = vim.o.lines
+    local max_width = math.floor(screen_width * 0.5)
+    local max_height = math.floor(screen_height * 0.5)
+    
+    return {
+        width = math.min(max_width, max_line_length + 4),  -- 增加边框间距
+        height = math.min(max_height, #content_lines + 4)  -- 增加标题和边距
+    }
+end
+
 function M.create_window(title, content_lines)
-    local dim = calculate_dimensions(content_lines, #title)
+    local dim = M.calculate_dimensions(content_lines, #title)
     local win_config = {
         relative = 'editor',
         width = dim.width,
@@ -19,24 +36,6 @@ function M.create_window(title, content_lines)
     -- 设置关闭快捷键
     vim.api.nvim_buf_set_keymap(buf, 'n', 'q', '<cmd>q!<CR>', {noremap = true, silent = true})
     return {win_id = win_id, buf = buf}
-end
-
-
-function M.calculate_dimensions(content_lines, min_width)
-    local max_line_length = min_width or 0
-    for _, line in ipairs(content_lines) do
-        max_line_length = math.max(max_line_length, #line)
-    end
-    
-    local screen_width = vim.o.columns
-    local screen_height = vim.o.lines
-    local max_width = math.floor(screen_width * 0.5)
-    local max_height = math.floor(screen_height * 0.5)
-    
-    return {
-        width = math.min(max_width, max_line_length + 4),  -- 增加边框间距
-        height = math.min(max_height, #content_lines + 4)  -- 增加标题和边距
-    }
 end
 
 function M.update_progress(win, text, completed, total)
@@ -78,7 +77,7 @@ function M.show_results(errors, success_count, total, operation)
     table.insert(content, "Press q to close")
 
     -- 自动计算窗口尺寸
-    local dim = calculate_dimensions(content, 40)  -- 最小宽度40
+    local dim = M.calculate_dimensions(content, 40)  -- 最小宽度40
     local centered_content = {}
     for _, line in ipairs(content) do
         table.insert(centered_content, center_text(line, dim.width - 4))  -- 考虑边框
