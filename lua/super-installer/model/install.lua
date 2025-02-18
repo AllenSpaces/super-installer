@@ -64,7 +64,7 @@ function M.install_plugin(plugin, git_type, callback)
 	end
 
 	local repo_url = utils.get_repo_url(plugin, git_type)
-	local install_dir = utils.get_install_dir(plugin)
+	local install_dir = utils.get_install_dir(plugin,"install")
 
 	local cmd
 	if vim.fn.isdirectory(install_dir) == 1 then

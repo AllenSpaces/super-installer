@@ -55,7 +55,7 @@ function M.start(config)
 end
 
 function M.remove_plugin(plugin_name, callback)
-	local install_dir = utils.get_install_dir(plugin_name)
+	local install_dir = utils.get_install_dir(plugin_name,"remove")
 
 	if vim.fn.isdirectory(install_dir) ~= 1 then
 		callback(true)

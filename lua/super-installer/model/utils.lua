@@ -14,9 +14,11 @@ function M.execute_command(cmd, callback)
 	})
 end
 
-function M.get_install_dir(plugin)
-	vim.notify(plugin)
-	return vim.fn.stdpath("data") .. "/site/pack/packer/start/" .. plugin:match("/([^/]+)$")
+function M.get_install_dir(plugin, type)
+	if type ~= "install":
+        return vim.fn.stdpath("data") .. "/site/pack/packer/opt/" .. plugin
+    else:
+	    return vim.fn.stdpath("data") .. "/site/pack/packer/start/" .. plugin:match("/([^/]+)$")
 end
 
 function M.get_repo_url(plugin, git_type)
