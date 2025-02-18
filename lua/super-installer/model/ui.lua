@@ -34,7 +34,7 @@ function M.update_progress(win, text, completed, total)
 		.. string.format("%d/%d (%d%%)", completed, total, math.floor(progress * 100))
 
 	vim.api.nvim_buf_set_lines(win.buf, 0, -1, false, {
-        center_text("Installing" .. " " .. text,80),
+        center_text(text,80),
         "",
 		center_text(progress_bar, 80),
 	})
