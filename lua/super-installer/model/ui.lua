@@ -23,7 +23,7 @@ function M.calculate_dimensions(content_lines, min_width)
 end
 
 function M.update_progress(win, text, completed, total)
-	local FIXED_BAR_WIDTH = 100
+	local FIXED_BAR_WIDTH = 50
 	local progress = completed / total
 	local filled = math.floor(FIXED_BAR_WIDTH * progress)
 
@@ -34,9 +34,9 @@ function M.update_progress(win, text, completed, total)
 		.. string.format("%d/%d (%d%%)", completed, total, math.floor(progress * 100))
 
 	vim.api.nvim_buf_set_lines(win.buf, 0, -1, false, {
-        center_text("Installing" .. " " .. text,110),
+        center_text("Installing" .. " " .. text,80),
         "",
-		center_text(progress_bar, 110),
+		center_text(progress_bar, 80),
 	})
 	vim.api.nvim_buf_set_keymap(win.buf, "n", "q", "<cmd>q!<CR>", { noremap = true, silent = true })
 end
@@ -87,25 +87,25 @@ end
 function M.show_results(errors, success_count, total, operation)
 	local content = {
 		"",
-		center_text(operation .. " Results (" .. success_count .. "/" .. total .. " successful)", 110),
+		center_text(operation .. " Results (" .. success_count .. "/" .. total .. " successful)", 80),
 		""
 	}
 
 	if #errors > 0 then
-		table.insert(content, center_text("Errors (" .. #errors .. "):", 110))
+		table.insert(content, center_text("Errors (" .. #errors .. "):", 80))
 		for i, e in ipairs(errors) do
-			table.insert(content, center_text(string.format("%d. %s: %s", i, e.plugin, e.error), 110))
+			table.insert(content, center_text(string.format("%d. %s: %s", i, e.plugin, e.error), 80))
 			if i >= 5 then
-				table.insert(content, center_text("... (truncated)", 110))
+				table.insert(content, center_text("... (truncated)", 80))
 				break
 			end
 		end
 	else
-		table.insert(content, center_text("✓ All operations completed successfully!", 110))
+		table.insert(content, center_text("✓ All operations completed successfully!", 80))
 	end
 
 	table.insert(content, "")
-	table.insert(content, center_text("Press q to close", 110))
+	table.insert(content, center_text("Press q to close", 80))
 
 	local win = M.create_window(operation .. " Report", content)
 	vim.api.nvim_buf_set_lines(win.buf, 0, -1, false, content)
