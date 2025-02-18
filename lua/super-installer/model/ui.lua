@@ -56,7 +56,8 @@ function M.create_window(title, content_lines)
             title = title,
             title_pos = "center",
         }
-	elseif type(content_lines) == "" then
+	elseif type(content_lines) == "number" then
+        content_lines = { " " * content_lines }
 
         win_config = {
             relative = "editor",
