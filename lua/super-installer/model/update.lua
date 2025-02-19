@@ -111,6 +111,7 @@ function M.start(config)
         ui.update_progress(progress_win_check, "Checking: " .. plugin, index - 1, total, config.ui.progress.icon)
 
         M.check_plugin(plugin, function(ok, result)
+            print(result)
             if ok then
                 if string.find(result, "up-to-date") then
                     table.insert(plugins_to_update, plugin)
