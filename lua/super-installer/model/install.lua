@@ -8,17 +8,38 @@ local is_installation_aborted = false
 function M.start(config)
 	is_installation_aborted = false
 
-	local plugins = config.install.use or {}
-	if config.install.default then
-		table.insert(plugins, 1, config.install.default)
+	local used_plugins = {}
+    local plugins = config.install.use
+    table.insert(plugins, 1, config.install.default)
+
+	for _, plugin in ipairs(plugins) do
+		used_plugins[plugin] = true
 	end
 
-	if #plugins == 0 then
+	local install_dir = vim.fn.stdpath("data") .. "/site/pack/packer/start"
+	local installed_plugins = vim.split(vim.fn.glob(install_dir .. "/*"), "\n")
+
+	local to_install = {}
+
+	for _, path in ipairs(installed_plugins) do
+		local plugin_name = vim.fn.fnamemodify(path, ":t")
+		used_plugins[plugin_name] = true
+	end
+
+	for _, plugin in ipairs(plugins) do
+		if not used_plugins[plugin:match("/([^/]+)$")] then
+			if plugin_name ~= "super-installer" then
+				table.insert(to_install, plugin)
+			end
+		end
+	end
+
+	if #to_install == 0 then
 		ui.log_message("No plugins to install.")
 		return
 	end
 
-	local total = #plugins
+	local total = #to_install
 	local errors = {}
 	local success_count = 0
 	local progress_win = ui.create_window("Installing Plugins", 65)
@@ -43,7 +64,7 @@ function M.start(config)
 			return
 		end
 
-		local plugin = plugins[index]
+		local plugin = to_install[index]
 		ui.update_progress(progress_win, "Installing: " .. plugin, index - 1, total, config.ui.progress.icon)
 		M.install_plugin(plugin, config.git, function(ok, err)
 			if ok then

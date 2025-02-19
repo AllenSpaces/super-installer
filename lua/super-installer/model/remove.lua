@@ -13,11 +13,11 @@ function M.start(config)
 	end
 
 	local install_dir = vim.fn.stdpath("data") .. "/site/pack/packer/start"
-	local installed_plugins = vim.split(vim.fn.glob(install_dir .. "/*"), "\n")
+	local remove_plugins = vim.split(vim.fn.glob(install_dir .. "/*"), "\n")
 
 	local to_remove = {}
 
-	for _, path in ipairs(installed_plugins) do
+	for _, path in ipairs(remove_plugins) do
 		local plugin_name = vim.fn.fnamemodify(path, ":t")
 		if not used_plugins[plugin_name] then
 			if plugin_name ~= "super-installer" then

@@ -27,7 +27,7 @@ function M.update_progress(win, text, completed, total, icon)
 	local progress = completed / total
 	local filled = math.floor(FIXED_BAR_WIDTH * progress)
 
-	local progress_bar = ""
+	local progress_bar = string.rep(" ", 2)
 		.. string.rep(icon, filled)
 		.. string.rep(" ", FIXED_BAR_WIDTH - filled)
 		.. " "
@@ -90,22 +90,25 @@ function M.create_window(title, content_lines)
 end
 
 function M.show_results(errors, success_count, total, operation)
-	local content = {
-		"",
-		center_text(operation .. " Results (" .. success_count .. "/" .. total .. " successful)", 65),
-		"",
-	}
+	local content = {}
 
 	if #errors > 0 then
+		table.insert(content, "")
 		table.insert(content, center_text("Errors (" .. #errors .. "):", 65))
+		table.insert(content, "")
 		for i, e in ipairs(errors) do
 			table.insert(content, center_text(string.format("%d. %s: %s", i, e.plugin, e.error), 65))
+			table.insert(content, "")
 			if i >= 5 then
 				table.insert(content, center_text("... (truncated)", 65))
+				table.insert(content, "")
 				break
 			end
 		end
 	else
+		table.insert(content, "")
+		table.insert(content, center_text(operation .. " Results (" .. success_count .. "/" .. total .. " successful)", 65))
+		table.insert(content, "")
 		table.insert(content, center_text("✓ All operations completed successfully!", 65))
 	end
 

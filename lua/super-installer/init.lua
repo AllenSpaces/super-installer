@@ -17,9 +17,9 @@ M.setup = function(user_config)
 
 		ui = {
 			progress = {
-				icon = ""
-			}
-		}
+				icon = "",
+			},
+		},
 	}
 
 	M.config = vim.tbl_deep_extend("force", default_config, user_config or {})
@@ -33,7 +33,7 @@ M.setup = function(user_config)
 	end, {})
 
 	vim.api.nvim_create_user_command("SuperUpdate", function()
-		require("super-installer.model.remove").start(M.config)
+		require("super-installer.model.update").start(M.config)
 	end, {})
 
 	local keymap_opts = { noremap = true, silent = true }
