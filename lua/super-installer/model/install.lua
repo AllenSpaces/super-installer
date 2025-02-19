@@ -55,7 +55,6 @@ function M.start(config)
 				vim.fn.jobstop(job_id)
 			end
 			is_installation_aborted = true
-			ui.log_message("Plugin installation aborted by user.")
 		end,
 	})
 

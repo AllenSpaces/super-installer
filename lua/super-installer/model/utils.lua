@@ -17,8 +17,8 @@ function M.execute_command(cmd, callback)
         end,
         on_exit = function(_, exit_code)
             if exit_code == 0 then
-                local output = table.concat(stdout_chunks, "\n")
-                callback(true, output)
+				local success_msg = table.concat(stdout_chunks, "\n")
+                callback(true, success_msg:gsub("\n", " "))
             else
                 local error_msg = table.concat(stderr_chunks, "\n")
                 if #error_msg == 0 then

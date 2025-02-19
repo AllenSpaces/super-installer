@@ -37,12 +37,16 @@ function M.start(config)
                 vim.fn.jobstop(job_id)
             end
             is_update_aborted = true
-            ui.log_message("Plugin update aborted by user.")
         end,
     })
 
     local function update_next_plugin(index, win)
         if is_update_aborted then
+            return
+        end
+
+        if #plugins_to_update == 0 then
+            ui.log_message("Plugins is already up-to-date!")
             return
         end
 
@@ -84,10 +88,8 @@ function M.start(config)
                 ui.show_results(errors, success_count, total, "Checking")
             else
                 if #plugins_to_update == 0 then
-                    ui.log_message("No plugins need to be updated.")
                     vim.api.nvim_win_close(progress_win_check.win_id, true)
                 else
-                    vim.notify(plugins_to_update)
                     vim.api.nvim_win_close(progress_win_check.win_id, true)
                     update_win = ui.create_window("Updating Plugins", 65)
 
@@ -95,7 +97,6 @@ function M.start(config)
                         buffer = update_win.buf,
                         callback = function()
                             is_update_aborted = true
-                            ui.log_message("Plugin update aborted by user.")
                         end,
                     })
 
