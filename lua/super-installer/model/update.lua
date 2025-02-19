@@ -89,6 +89,7 @@ function M.start(config)
             else
                 if #plugins_to_update == 0 then
                     vim.api.nvim_win_close(progress_win_check.win_id, true)
+                    ui.log_message("Plugins is already up-to-date!")
                 else
                     vim.api.nvim_win_close(progress_win_check.win_id, true)
                     update_win = ui.create_window("Updating Plugins", 65)

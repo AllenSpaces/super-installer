@@ -2,7 +2,7 @@ local M = {}
 
 M.setup = function(user_config)
 	local default_config = {
-		git = "ssh",
+		git = "https",
 
 		install = {
 			default = "wukuohao2003/super-installer",
