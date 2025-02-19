@@ -1,38 +1,37 @@
 local M = {}
 
 function M.execute_command(cmd, callback)
-	local stdout_chunks = {} 
-	local timer = vim.loop.new_timer()
-    local job_id
+    local stdout_chunks = {}
+    local stderr_chunks = {}
 
-    timer:start(5000, 0, function()
-        if job_id then
-            vim.fn.jobstop(job_id)
-            callback(false, "Command timed out after 5 seconds")
-        end
-        timer:stop()
-        timer:close()
-    end)
-
-	job_id = vim.fn.jobstart(cmd, {
-		on_stdout = function(_, data, _)
+    local job_id = vim.fn.jobstart(cmd, {
+        on_stdout = function(_, data, _)
             for _, line in ipairs(data) do
                 table.insert(stdout_chunks, line)
             end
         end,
-		on_exit = function(_, exit_code)
-			timer:stop()
-            timer:close()
-			if exit_code == 0 then
-				local output = table.concat(stdout_chunks, "\n")
-				callback(true, output)
-			else
-				local result = vim.fn.system(cmd .. " 2>&1")
-				local error_msg = result:gsub("\n", " "):sub(1, 50) .. "..."
-				callback(false, error_msg)
-			end
-		end,
-	})
+        on_stderr = function(_, data, _)
+            for _, line in ipairs(data) do
+                table.insert(stderr_chunks, line)
+            end
+        end,
+        on_exit = function(_, exit_code)
+            if exit_code == 0 then
+                local output = table.concat(stdout_chunks, "\n")
+                callback(true, output)
+            else
+                local error_msg = table.concat(stderr_chunks, "\n")
+                if #error_msg == 0 then
+                    error_msg = "Unknown error occurred"
+                else
+                    error_msg = error_msg:gsub("\n", " "):sub(1, 50) .. "..."
+                end
+                callback(false, error_msg)
+            end
+        end
+    })
+
+	return job_id
 end
 
 function M.get_install_dir(plugin, type)
@@ -58,6 +57,21 @@ function M.get_repo_url(plugin, git_type)
 	else
 		return string.format("https://github.com/%s.git", plugin)
 	end
+end
+
+function M.table_duplicates(tb)
+    local seen = {}
+
+    local result = {}
+
+    for _, value in ipairs(tb) do
+        if not seen[value] then
+            seen[value] = true
+            table.insert(result, value)
+        end
+    end
+
+    return result
 end
 
 return M

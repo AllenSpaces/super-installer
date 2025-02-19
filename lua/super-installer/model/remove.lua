@@ -2,11 +2,14 @@ local ui = require("super-installer.model.ui")
 local utils = require("super-installer.model.utils")
 
 local M = {}
+local job_id = nil
 
 function M.start(config)
 	local used_plugins = {}
     local plugins = config.install.use
     table.insert(plugins, 1, config.install.default)
+
+	used_plugins = utils.table_duplicates(used_plugins)
 
 	for _, plugin in ipairs(plugins) do
 		used_plugins[plugin:match("/([^/]+)$")] = true
@@ -67,7 +70,7 @@ function M.remove_plugin(plugin_name, callback)
 	end
 
 	local cmd = string.format("rm -rf %s", install_dir)
-	utils.execute_command(cmd, callback)
+	job_id = utils.execute_command(cmd, callback)
 end
 
 return M

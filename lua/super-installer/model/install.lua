@@ -4,6 +4,7 @@ local utils = require("super-installer.model.utils")
 local M = {}
 
 local is_installation_aborted = false
+local job_id = nil
 
 function M.start(config)
 	is_installation_aborted = false
@@ -11,6 +12,8 @@ function M.start(config)
 	local used_plugins = {}
     local plugins = config.install.use
     table.insert(plugins, 1, config.install.default)
+
+	used_plugins = utils.table_duplicates(used_plugins)
 
 	for _, plugin in ipairs(plugins) do
 		used_plugins[plugin] = true
@@ -47,6 +50,10 @@ function M.start(config)
 	vim.api.nvim_create_autocmd("WinClosed", {
 		buffer = progress_win.buf,
 		callback = function()
+			vim.notify(job_id)
+			if(job_id) then
+				vim.fn.jobstop(job_id)
+			end
 			is_installation_aborted = true
 			ui.log_message("Plugin installation aborted by user.")
 		end,
@@ -94,7 +101,7 @@ function M.install_plugin(plugin, git_type, callback)
 		cmd = string.format("git clone --depth 1 %s %s", repo_url, install_dir)
 	end
 
-	utils.execute_command(cmd, callback)
+	job_id = utils.execute_command(cmd, callback)
 end
 
 return M

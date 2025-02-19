@@ -5,6 +5,7 @@ local M = {}
 
 local is_update_aborted = false
 local update_win = nil
+local job_id = nil
 
 local plugins_to_update = {}
 
@@ -16,6 +17,8 @@ function M.start(config)
     if config.install.default then
         table.insert(plugins, 1, config.install.default)
     end
+
+    plugins = utils.table_duplicates(plugins)
 
     if #plugins == 0 then
         ui.log_message("No plugins to update.")
@@ -30,6 +33,9 @@ function M.start(config)
     vim.api.nvim_create_autocmd("WinClosed", {
         buffer = progress_win_check.buf,
         callback = function()
+            if(job_id) then
+                vim.fn.jobstop(job_id)
+            end
             is_update_aborted = true
             ui.log_message("Plugin update aborted by user.")
         end,
@@ -81,6 +87,7 @@ function M.start(config)
                     ui.log_message("No plugins need to be updated.")
                     vim.api.nvim_win_close(progress_win_check.win_id, true)
                 else
+                    vim.notify(plugins_to_update)
                     vim.api.nvim_win_close(progress_win_check.win_id, true)
                     update_win = ui.create_window("Updating Plugins", 65)
 
@@ -103,13 +110,11 @@ function M.start(config)
 
         M.check_plugin(plugin, function(ok, result)
             if ok then
-                if result ~= nil then
-                    if result[1] ~= "Everything up-to-date" then
-                        table.insert(plugins_to_update, plugin)
-                    end
+                if string.find(result, "up-to-date") then
+                    table.insert(plugins_to_update, plugin)
                 end
             else
-                table.insert(errors, { plugin = plugin, error = "Plugin check failed" })
+                table.insert(errors, { plugin = plugin, error = result })
             end
             check_next_plugin(index + 1)
         end)
@@ -131,9 +136,9 @@ function M.check_plugin(plugin, callback)
         return
     end
 
-    local fetch_cmd = string.format("cd %s && git fetch --dry-run 2>&1", install_dir)
+    local fetch_cmd = string.format("cd %s && git fetch -v", install_dir)
 
-    utils.execute_command(fetch_cmd, callback)
+    job_id = utils.execute_command(fetch_cmd, callback)
 end
 
 function M.update_plugin(plugin, callback)
@@ -145,7 +150,7 @@ function M.update_plugin(plugin, callback)
     local install_dir = utils.get_install_dir(plugin, "update")
     local cmd = string.format("cd %s && git pull", install_dir)
 
-    utils.execute_command(cmd, callback)
+    job_id = utils.execute_command(cmd, callback)
 end
 
 return M
