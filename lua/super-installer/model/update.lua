@@ -44,7 +44,7 @@ function M.start(config)
 			ui.update_progress(win, msg, #plugins_to_update, #plugins_to_update, config.ui.progress.icon)
 			vim.defer_fn(function()
 				vim.api.nvim_win_close(win.win_id, true)
-				ui.show_results(errors, success_count, #plugins_to_update, "Update")
+				ui.show_report(errors, success_count, #plugins_to_update, "Update")
 			end, 100)
 			return
 		end
