@@ -2,75 +2,84 @@ local ui = require("super-installer.model.ui")
 local utils = require("super-installer.model.utils")
 
 local M = {}
-local job_id = nil
 
 function M.start(config)
-	local used_plugins = {}
-    local plugins = config.install.use
-    table.insert(plugins, 1, config.install.default)
+	local required_plugins = {}
+	local plugin_specs = { config.install.default }
 
-	used_plugins = utils.table_duplicates(used_plugins)
-
-	for _, plugin in ipairs(plugins) do
-		used_plugins[plugin:match("/([^/]+)$")] = true
+	for _, spec in ipairs(config.install.use) do
+		table.insert(plugin_specs, spec)
 	end
 
-	local install_dir = vim.fn.stdpath("data") .. "/site/pack/packer/start"
-	local remove_plugins = vim.split(vim.fn.glob(install_dir .. "/*"), "\n")
+	for _, spec in ipairs(plugin_specs) do
+		required_plugins[spec:match("/([^/]+)$")] = true
+	end
 
-	local to_remove = {}
+	local packer_path = vim.fn.stdpath("data") .. "/site/pack/packer/start"
+	local installed_plugins = vim.split(vim.fn.glob(packer_path .. "/*"), "\n")
 
-	for _, path in ipairs(remove_plugins) do
-		local plugin_name = vim.fn.fnamemodify(path, ":t")
-		if not used_plugins[plugin_name] then
-			if plugin_name ~= "super-installer" then
-				table.insert(to_remove, plugin_name)
-			end
+	local removal_candidates = {}
+	for _, path in ipairs(installed_plugins) do
+		local name = vim.fn.fnamemodify(path, ":t")
+		if not required_plugins[name] and name ~= "super-installer" then
+			table.insert(removal_candidates, name)
 		end
 	end
 
-	if #to_remove == 0 then
-		ui.log_message("No plugins to remove.")
+	if #removal_candidates == 0 then
+		ui.log_message("No unused plugins found.")
 		return
 	end
 
-	local total = #to_remove
+	local total = #removal_candidates
 	local errors = {}
-	local success_count = 0
-	local progress_win = ui.create_window("Removing Plugins...", 65)
+	local removed_count = 0
+	local progress_win = ui.create_window("Plugin Cleanup Progress", 70)
 
-	local function remove_next_plugin(index)
+	local function process_next(index)
 		if index > total then
-			ui.update_progress(progress_win, "Removing: Completed", total, total, config.ui.progress.icon)
-			vim.api.nvim_win_close(progress_win.win_id, true)
-			ui.show_results(errors, success_count, total, "Removal")
+			ui.update_progress(progress_win, "Finalizing cleanup...", total, total, config.ui.progress.icon)
+			vim.defer_fn(function()
+				vim.api.nvim_win_close(progress_win.win_id, true)
+				ui.show_report(errors, removed_count, total, "removal")
+			end, 300)
 			return
 		end
-		local plugin = to_remove[index]
+
+		local plugin = removal_candidates[index]
 		ui.update_progress(progress_win, "Removing: " .. plugin, index - 1, total, config.ui.progress.icon)
-		M.remove_plugin(plugin, function(ok, err)
-			if ok then
-				success_count = success_count + 1
+
+		M.remove_plugin(plugin, function(success, err)
+			if success then
+				removed_count = removed_count + 1
 			else
 				table.insert(errors, { plugin = plugin, error = err })
 			end
-			remove_next_plugin(index + 1)
+			process_next(index + 1)
 		end)
 	end
 
-	remove_next_plugin(1)
+	process_next(1)
 end
 
 function M.remove_plugin(plugin_name, callback)
-	local install_dir = utils.get_install_dir(plugin_name,"remove")
+	local install_path = utils.get_install_dir(plugin_name, "start")
 
-	if vim.fn.isdirectory(install_dir) ~= 1 then
+	if vim.fn.isdirectory(install_path) ~= 1 then
 		callback(true)
 		return
 	end
 
-	local cmd = string.format("rm -rf %s", install_dir)
-	job_id = utils.execute_command(cmd, callback)
+	local cmd = string.format("rm -rf %s", vim.fn.shellescape(install_path))
+	utils.execute_command(cmd, function(success, err)
+		if success then
+			vim.schedule(function()
+				vim.cmd("redrawtabline")
+				vim.cmd("redrawstatus")
+			end)
+		end
+		callback(success, err)
+	end)
 end
 
 return M

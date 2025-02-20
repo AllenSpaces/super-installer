@@ -17,7 +17,7 @@ M.setup = function(user_config)
 
 		ui = {
 			progress = {
-				icon = "",
+				icon = "",
 			},
 		},
 	}

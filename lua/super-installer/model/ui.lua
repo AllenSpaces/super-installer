@@ -46,36 +46,28 @@ function M.update_progress(win, text, completed, total, icon)
 end
 
 function M.create_window(title, content_lines)
+	local dim = nil
+	local win_config = {}
+
 	if type(content_lines) == "string" then
 		content_lines = { content_lines }
-		dim = M.calculate_dimensions(content_lines, #title)
-
-		win_config = {
-			relative = "editor",
-			width = dim.width,
-			height = dim.height,
-			col = math.floor((vim.o.columns - dim.width) / 2),
-			row = math.floor((vim.o.lines - dim.height) / 2),
-			style = "minimal",
-			border = "rounded",
-			title = title,
-			title_pos = "center",
-		}
 	elseif type(content_lines) == "number" then
 		content_lines = { string.rep(" ", content_lines) }
-		dim = M.calculate_dimensions(content_lines, #title)
-		win_config = {
-			relative = "editor",
-			width = dim.width,
-			height = dim.height,
-			col = math.floor((vim.o.columns - dim.width) / 2),
-			row = math.floor((vim.o.lines - dim.height) / 2),
-			style = "minimal",
-			border = "rounded",
-			title = title,
-			title_pos = "center",
-		}
 	end
+
+	dim = M.calculate_dimensions(content_lines, #title)
+
+	win_config = {
+		relative = "editor",
+		width = dim.width,
+		height = dim.height,
+		col = math.floor((vim.o.columns - dim.width) / 2),
+		row = math.floor((vim.o.lines - dim.height) / 2),
+		style = "minimal",
+		border = "rounded",
+		title = title,
+		title_pos = "center",
+	}
 
 	if M.win_cache and vim.api.nvim_win_is_valid(M.win_cache.win_id) then
 		vim.api.nvim_win_set_config(M.win_cache.win_id, win_config)
@@ -89,7 +81,7 @@ function M.create_window(title, content_lines)
 	return M.win_cache
 end
 
-function M.show_results(errors, success_count, total, operation)
+function M.show_report(errors, success_count, total, operation)
 	local content = {}
 
 	if #errors > 0 then
@@ -107,7 +99,10 @@ function M.show_results(errors, success_count, total, operation)
 		end
 	else
 		table.insert(content, "")
-		table.insert(content, center_text(operation .. " Results (" .. success_count .. "/" .. total .. " successful)", 65))
+		table.insert(
+			content,
+			center_text(operation .. " Results (" .. success_count .. "/" .. total .. " successful)", 65)
+		)
 		table.insert(content, "")
 		table.insert(content, center_text("✓ All operations completed successfully!", 65))
 	end
