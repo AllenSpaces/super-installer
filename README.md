@@ -128,4 +128,4 @@ If you want to contribute to the Super Installer plugin, feel free to submit iss
 
 ## License
 
-This plugin is released under the [Your License Name] license. See the `LICENSE` file in the repository for more details.
+This plugin is released under the MIT license. See the `LICENSE` file in the repository for more details.
