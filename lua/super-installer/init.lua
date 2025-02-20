@@ -36,10 +36,10 @@ M.setup = function(user_config)
 		require("super-installer.model.update").start(M.config)
 	end, {})
 
-	local keymap_opts = { noremap = true, silent = true }
-	vim.keymap.set("n", M.config.keymaps.install, "<cmd>SuperInstall<CR>", keymap_opts)
-	vim.keymap.set("n", M.config.keymaps.remove, "<cmd>SuperRemove<CR>", keymap_opts)
-	vim.keymap.set("n", M.config.keymaps.update, "<cmd>SuperUpdate<CR>", keymap_opts)
+	local keymap_options = { noremap = true, silent = true }
+	vim.keymap.set("n", M.config.keymaps.install, "<cmd>SuperInstall<CR>", keymap_options)
+	vim.keymap.set("n", M.config.keymaps.remove, "<cmd>SuperRemove<CR>", keymap_options)
+	vim.keymap.set("n", M.config.keymaps.update, "<cmd>SuperUpdate<CR>", keymap_options)
 end
 
 return M
