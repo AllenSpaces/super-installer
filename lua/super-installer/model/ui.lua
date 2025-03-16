@@ -116,7 +116,7 @@ function M.show_report(errors, success_count, total, operation)
 end
 
 function M.log_message(message)
-	vim.notify(message, vim.log.levels.INFO, { title = "nvim" })
+	vim.notify(message, vim.log.levels.INFO, { title = "SuperInstaller" })
 end
 
 return M
