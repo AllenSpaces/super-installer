@@ -6,6 +6,7 @@ M.setup = function(user_config)
 
 		install = {
 			default = "wukuohao2003/super-installer",
+			auto_update = false,
 			use = {},
 		},
 
@@ -40,6 +41,18 @@ M.setup = function(user_config)
 	vim.keymap.set("n", M.config.keymaps.install, "<cmd>SuperInstall<CR>", keymap_options)
 	vim.keymap.set("n", M.config.keymaps.remove, "<cmd>SuperRemove<CR>", keymap_options)
 	vim.keymap.set("n", M.config.keymaps.update, "<cmd>SuperUpdate<CR>", keymap_options)
+
+	if M.config.install.auto_update then
+		vim.api.nvim_create_autocmd("VimEnter", {
+			pattern = { "*" },
+			callback = function()
+				local superinstaller_status, _ = pcall(vim.fn.execute, "SuperUpdate")
+				if not superinstaller_status then
+					vim.notify("Check SuperInstaller status", vim.log.levels.WARN, { title = "SuperInstaller" })
+				end
+			end,
+		})
+	end
 end
 
 return M
