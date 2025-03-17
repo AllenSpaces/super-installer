@@ -36,7 +36,7 @@ function M.update_progress(win, text, completed, total, ui)
 
 	vim.api.nvim_buf_set_lines(win.buf, 0, -1, false, {
 		"",
-		center_text(text, 68),
+		center_text(text, 67),
 		"",
 		center_text("Press 'q' to cease the operation", 67),
 		"",

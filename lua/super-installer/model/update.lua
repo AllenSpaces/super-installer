@@ -74,7 +74,7 @@ function M.start(config)
 				vim.api.nvim_win_close(win.win_id, true)
 				ui.log_message("All Plugins is already up-to-date")
 			elseif not is_update_aborted then
-				update_win = ui.create_window("Updating", 65)
+				update_win = ui.create_window("Updating", 68)
 				vim.api.nvim_create_autocmd("WinClosed", {
 					buffer = update_win.buf,
 					callback = function()
