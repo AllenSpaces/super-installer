@@ -34,7 +34,7 @@ function M.start(config)
 	local total = #removal_candidates
 	local errors = {}
 	local removed_count = 0
-	local progress_win = ui.create_window("Plugin Cleanup Progress", 70)
+	local progress_win = ui.create_window("Plugin Cleanup Progress", 72)
 
 	local function process_next(index)
 		if index > total then

@@ -26,7 +26,7 @@ function M.start(config)
 	local total = #plugins
 	local errors = {}
 	local success_count = 0
-	local progress_win_check = ui.create_window(config.ui.manager.icon.check .. " Checking Plugins", 65)
+	local progress_win_check = ui.create_window("Checking Plugins", 67)
 
 	vim.api.nvim_create_autocmd("WinClosed", {
 		buffer = progress_win_check.buf,

@@ -37,7 +37,7 @@ function M.start(config)
 	local total = #pending_install
 	local errors = {}
 	local installed_count = 0
-	local progress_win = ui.create_window(config.ui.manager.icon.install .. " Plugin Installation Progress", 70)
+	local progress_win = ui.create_window("Plugin Installation Progress", 72)
 
 	vim.api.nvim_create_autocmd("WinClosed", {
 		buffer = progress_win.buf,
