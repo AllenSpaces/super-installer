@@ -26,7 +26,7 @@ function M.start(config)
 	local total = #plugins
 	local errors = {}
 	local success_count = 0
-	local progress_win_check = ui.create_window("Checking Plugins", 65)
+	local progress_win_check = ui.create_window(config.ui.manager.icon.check .. " Checking Plugins", 65)
 
 	vim.api.nvim_create_autocmd("WinClosed", {
 		buffer = progress_win_check.buf,
@@ -41,7 +41,7 @@ function M.start(config)
 	local function update_next_plugin(index, win)
 		if is_update_aborted or index > #plugins_to_update then
 			local msg = is_update_aborted and "Stop" or "Success"
-			ui.update_progress(win, msg, #plugins_to_update, #plugins_to_update, config.ui.progress.icon)
+			ui.update_progress(win, msg, #plugins_to_update, #plugins_to_update, config.ui)
 			vim.defer_fn(function()
 				vim.api.nvim_win_close(win.win_id, true)
 				ui.show_report(errors, success_count, #plugins_to_update, "Update")
@@ -50,7 +50,7 @@ function M.start(config)
 		end
 
 		local plugin = plugins_to_update[index]
-		ui.update_progress(win, "Updating: " .. plugin, index - 1, #plugins_to_update, config.ui.progress.icon)
+		ui.update_progress(win, "Updating: " .. plugin, index - 1, #plugins_to_update, config.ui)
 
 		M.update_plugin(plugin, function(ok, err)
 			if ok then
@@ -83,7 +83,7 @@ function M.start(config)
 		end
 
 		local plugin = plugins[index]
-		ui.update_progress(progress_win_check, "Checking: " .. plugin, index - 1, total, config.ui.progress.icon)
+		ui.update_progress(progress_win_check, "Checking: " .. plugin, index - 1, total, config.ui)
 
 		M.check_plugin(plugin, function(ok, result)
 			if ok and result == "need_update" then
@@ -118,7 +118,11 @@ function M.check_plugin(plugin, callback)
 
 		utils.execute_command(check_cmd, function(_, result)
 			local count = tonumber(result:match("%d+"))
-			callback(count and count > 0, count and "need_update" or "already_updated")
+			if count and count > 0 then
+				callback(true, "need_update")
+			else
+				callback(true, "already_updated")
+			end
 		end)
 	end)
 	table.insert(jobs, job)

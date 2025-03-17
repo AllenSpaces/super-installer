@@ -22,16 +22,16 @@ function M.calculate_dimensions(content_lines, min_width)
 	}
 end
 
-function M.update_progress(win, text, completed, total, icon)
+function M.update_progress(win, text, completed, total, ui)
 	local FIXED_BAR_WIDTH = 50
 	local progress = completed / total
 	local filled = math.floor(FIXED_BAR_WIDTH * progress)
 
 	local progress_bar = string.rep(" ", 2)
-		.. string.rep(icon, filled)
+		.. string.rep(ui.progress.icon, filled)
 		.. string.rep(" ", FIXED_BAR_WIDTH - filled)
 		.. " "
-		.. string.format("%d/%d (%d%%)", completed, total, math.floor(progress * 100))
+		.. string.format("%d/%d (%d%%) %s", completed, total, math.floor(progress * 100), ui.manager.icon.package)
 
 	vim.api.nvim_buf_set_lines(win.buf, 0, -1, false, {
 		"",

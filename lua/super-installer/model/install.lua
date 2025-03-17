@@ -37,7 +37,7 @@ function M.start(config)
 	local total = #pending_install
 	local errors = {}
 	local installed_count = 0
-	local progress_win = ui.create_window("Plugin Installation Progress", 70)
+	local progress_win = ui.create_window(config.ui.manager.icon.install .. " Plugin Installation Progress", 70)
 
 	vim.api.nvim_create_autocmd("WinClosed", {
 		buffer = progress_win.buf,
@@ -52,7 +52,7 @@ function M.start(config)
 		end
 
 		if index > total then
-			ui.update_progress(progress_win, "Finalizing installation...", total, total, config.ui.progress.icon)
+			ui.update_progress(progress_win, "Finalizing installation...", total, total, config.ui)
 			vim.defer_fn(function()
 				vim.api.nvim_win_close(progress_win.win_id, true)
 				ui.show_report(errors, installed_count, total, "installation")
@@ -61,7 +61,7 @@ function M.start(config)
 		end
 
 		local plugin = pending_install[index]
-		ui.update_progress(progress_win, "Installing: " .. plugin, index - 1, total, config.ui.progress.icon)
+		ui.update_progress(progress_win, "Installing: " .. plugin, index - 1, total, config.ui)
 
 		M.install_plugin(plugin, config.git, function(success, err)
 			if success then

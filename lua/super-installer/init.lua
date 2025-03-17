@@ -20,6 +20,15 @@ M.setup = function(user_config)
 			progress = {
 				icon = "",
 			},
+			manager = {
+				icon = {
+					install = "",
+					update = "",
+					remove = "󰺝",
+					check = "󱫁",
+					package = "󰏖",
+				},
+			},
 		},
 	}
 

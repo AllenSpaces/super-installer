@@ -34,11 +34,11 @@ function M.start(config)
 	local total = #removal_candidates
 	local errors = {}
 	local removed_count = 0
-	local progress_win = ui.create_window("Plugin Cleanup Progress", 70)
+	local progress_win = ui.create_window(config.ui.manager.icon.remove .. " Plugin Cleanup Progress", 70)
 
 	local function process_next(index)
 		if index > total then
-			ui.update_progress(progress_win, "Finalizing cleanup...", total, total, config.ui.progress.icon)
+			ui.update_progress(progress_win, "Finalizing cleanup...", total, total, config.ui)
 			vim.defer_fn(function()
 				vim.api.nvim_win_close(progress_win.win_id, true)
 				ui.show_report(errors, removed_count, total, "removal")
@@ -47,7 +47,7 @@ function M.start(config)
 		end
 
 		local plugin = removal_candidates[index]
-		ui.update_progress(progress_win, "Removing: " .. plugin, index - 1, total, config.ui.progress.icon)
+		ui.update_progress(progress_win, "Removing: " .. plugin, index - 1, total, config.ui)
 
 		M.remove_plugin(plugin, function(success, err)
 			if success then
