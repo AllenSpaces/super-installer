@@ -31,7 +31,7 @@ function M.update_progress(win, text, completed, total, ui)
 		.. string.rep(ui.progress.icon, filled)
 		.. string.rep(" ", FIXED_BAR_WIDTH - filled)
 		.. " "
-		.. string.format("%d/%d (%d%%) %s", completed, total, math.floor(progress * 100), ui.manager.icon.package)
+		.. string.format("%s %d/%d (%d%%)", ui.manager.icon.package, completed, total, math.floor(progress * 100))
 
 	vim.api.nvim_buf_set_lines(win.buf, 0, -1, false, {
 		"",

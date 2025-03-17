@@ -52,7 +52,13 @@ function M.start(config)
 		end
 
 		if index > total then
-			ui.update_progress(progress_win, "Finalizing installation...", total, total, config.ui)
+			ui.update_progress(
+				progress_win,
+				config.ui.manager.icon.install .. " Finalizing installation...",
+				total,
+				total,
+				config.ui
+			)
 			vim.defer_fn(function()
 				vim.api.nvim_win_close(progress_win.win_id, true)
 				ui.show_report(errors, installed_count, total, "installation")

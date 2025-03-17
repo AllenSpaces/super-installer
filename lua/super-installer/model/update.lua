@@ -50,7 +50,13 @@ function M.start(config)
 		end
 
 		local plugin = plugins_to_update[index]
-		ui.update_progress(win, "Updating: " .. plugin, index - 1, #plugins_to_update, config.ui)
+		ui.update_progress(
+			win,
+			config.ui.manager.icon.update .. " Updating: " .. plugin,
+			index - 1,
+			#plugins_to_update,
+			config.ui
+		)
 
 		M.update_plugin(plugin, function(ok, err)
 			if ok then
@@ -83,7 +89,13 @@ function M.start(config)
 		end
 
 		local plugin = plugins[index]
-		ui.update_progress(progress_win_check, "Checking: " .. plugin, index - 1, total, config.ui)
+		ui.update_progress(
+			progress_win_check,
+			config.ui.manager.icon.check .. " Checking: " .. plugin,
+			index - 1,
+			total,
+			config.ui
+		)
 
 		M.check_plugin(plugin, function(ok, result)
 			if ok and result == "need_update" then
