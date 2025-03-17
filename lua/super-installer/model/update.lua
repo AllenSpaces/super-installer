@@ -68,9 +68,10 @@ function M.start(config)
 		end)
 	end
 
-	local function check_next_plugin(index)
+	local function check_next_plugin(index, win)
 		if is_update_aborted or index > total then
 			if #plugins_to_update == 0 and #errors == 0 then
+				vim.api.nvim_win_close(win.win_id, true)
 				ui.log_message("All Plugins is already up-to-date")
 			elseif not is_update_aborted then
 				update_win = ui.create_window("Updating", 65)
@@ -103,11 +104,11 @@ function M.start(config)
 			elseif not ok then
 				table.insert(errors, { plugin = plugin, error = result })
 			end
-			check_next_plugin(index + 1)
+			check_next_plugin(index + 1, progress_win_check)
 		end)
 	end
 
-	check_next_plugin(1)
+	check_next_plugin(1, progress_win_check)
 end
 
 function M.check_plugin(plugin, callback)
