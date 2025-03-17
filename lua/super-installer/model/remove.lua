@@ -50,7 +50,7 @@ function M.start(config)
 		ui.update_progress(
 			progress_win,
 			config.ui.manager.icon.remove .. " Removing: " .. plugin,
-			index - 1,
+			index,
 			total,
 			config.ui
 		)

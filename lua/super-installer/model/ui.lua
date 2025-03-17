@@ -23,7 +23,6 @@ function M.calculate_dimensions(content_lines, min_width)
 end
 
 function M.update_progress(win, text, completed, total, ui)
-	print(win, text, completed, total, ui)
 	local FIXED_BAR_WIDTH = 50
 	local progress = completed / total
 	local filled = math.floor(FIXED_BAR_WIDTH * progress)

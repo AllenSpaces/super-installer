@@ -67,7 +67,7 @@ function M.start(config)
 		end
 
 		local plugin = pending_install[index]
-		ui.update_progress(progress_win, "Installing: " .. plugin, index - 1, total, config.ui)
+		ui.update_progress(progress_win, "Installing: " .. plugin, index, total, config.ui)
 
 		M.install_plugin(plugin, config.git, function(success, err)
 			if success then

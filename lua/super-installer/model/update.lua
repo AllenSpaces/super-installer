@@ -53,7 +53,7 @@ function M.start(config)
 		ui.update_progress(
 			win,
 			config.ui.manager.icon.update .. " Updating: " .. plugin,
-			index - 1,
+			index,
 			#plugins_to_update,
 			config.ui
 		)
@@ -93,7 +93,7 @@ function M.start(config)
 		ui.update_progress(
 			progress_win_check,
 			config.ui.manager.icon.check .. " Checking: " .. plugin,
-			index - 1,
+			index,
 			total,
 			config.ui
 		)
