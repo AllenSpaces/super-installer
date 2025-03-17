@@ -59,7 +59,7 @@ M.setup = function(user_config)
 				local need_install = require("super-installer.model.install").need_install
 				if need_install then
 					if not installer then
-						vim.notify("Check SuperInstaller status", vim.log.levels.WARN, { title = "SuperInstaller" })
+						vim.notify("Check SuperInstaller Status", vim.log.levels.WARN, { title = "SuperInstaller" })
 					end
 				else
 					return false
