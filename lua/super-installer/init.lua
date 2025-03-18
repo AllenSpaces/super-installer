@@ -35,14 +35,6 @@ M.setup = function(user_config)
 
 	local config = vim.tbl_deep_extend("force", default_config, user_config or {})
 
-	local rt_paths = vim.opt.runtimepath:get()
-
-	for _, rt_path in ipairs(rt_paths) do
-		if rt_path ~= config.install.package_path then
-			vim.opt.runtimepath:append(config.install.package_path)
-		end
-	end
-
 	vim.api.nvim_create_user_command("SuperInstall", function()
 		require("super-installer.model.install").start(config)
 	end, {})
