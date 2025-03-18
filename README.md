@@ -4,19 +4,28 @@ Super Installer is a Neovim plugin designed to simplify the process of installin
 
 ## Installation
 
-### Mac
+### Mac/Linux
 
-```shell
+```bash
 git clone https://github.com/wukuohao2003/super-installer ~/.local/share/nvim/site/pack/packer/start
 ```
 
-### Windows
+### Window is currently not supported
 
-```shell
+```bash
 git clone https://github.com/wukuohao2003/super-installer "$env:LOCALAPPDATA\nvim-data\site\pack/packer/start"
 ```
 
 ## Configuration
+
+### Add the following content to your NVIM configuration file
+
+```lua
+vim.opt.runtimepath:append(os.getenv("HOME") .. "/.super/package/*")
+
+-- If you have enabled lsp, please uncomment this line
+vim.opt.runtimepath:append(os.getenv("HOME") .. "/.super/package/*/after")
+```
 
 You can customize the plugin by passing a configuration table to the `setup` function. Here is the default configuration:
 
