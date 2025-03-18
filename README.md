@@ -36,6 +36,13 @@ require('super-installer').setup({
 
     -- Plugins to install
     install = {
+        -- AutoInstall
+        auto_install = false,
+
+        -- Package Path
+        -- If you modify this configuration, please also change the runtimepath in the NVIM configuration file, otherwise your NVIM will not be able to run
+        package_path = "",
+
         -- Additional plugins to install, format: "{username}/{repo}"
         use = {}
     },
