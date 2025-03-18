@@ -7,6 +7,7 @@ M.setup = function(user_config)
 		install = {
 			default = "wukuohao2003/super-installer",
 			auto_update = false,
+			package_path = os.getenv("HOME") .. "/.super/package",
 			use = {},
 		},
 
@@ -32,18 +33,26 @@ M.setup = function(user_config)
 		},
 	}
 
-	M.config = vim.tbl_deep_extend("force", default_config, user_config or {})
+	local config = vim.tbl_deep_extend("force", default_config, user_config or {})
+
+	local rt_paths = vim.opt.runtimepath:get()
+
+	for _, rt_path in ipairs(rt_paths) do
+		if rt_path ~= config.install.package_path then
+			vim.opt.runtimepath:append(config.install.package_path)
+		end
+	end
 
 	vim.api.nvim_create_user_command("SuperInstall", function()
-		require("super-installer.model.install").start(M.config)
+		require("super-installer.model.install").start(config)
 	end, {})
 
 	vim.api.nvim_create_user_command("SuperRemove", function()
-		require("super-installer.model.remove").start(M.config)
+		require("super-installer.model.remove").start(config)
 	end, {})
 
 	vim.api.nvim_create_user_command("SuperUpdate", function()
-		require("super-installer.model.update").start(M.config)
+		require("super-installer.model.update").start(config)
 	end, {})
 
 	local keymap_options = { noremap = true, silent = true }

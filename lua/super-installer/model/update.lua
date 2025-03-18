@@ -58,7 +58,7 @@ function M.start(config)
 			config.ui
 		)
 
-		M.update_plugin(plugin, function(ok, err)
+		M.update_plugin(plugin, config.git, config.install.package_path, function(ok, err)
 			if ok then
 				success_count = success_count + 1
 			else
@@ -98,7 +98,7 @@ function M.start(config)
 			config.ui
 		)
 
-		M.check_plugin(plugin, function(ok, result)
+		M.check_plugin(plugin, config.git, config.install.package_path, function(ok, result)
 			if ok and result == "need_update" then
 				table.insert(plugins_to_update, plugin)
 			elseif not ok then
@@ -111,12 +111,12 @@ function M.start(config)
 	check_next_plugin(1, progress_win_check)
 end
 
-function M.check_plugin(plugin, callback)
+function M.check_plugin(plugin, git_config, package_path, callback)
 	if is_update_aborted then
 		return callback(false, "Stop")
 	end
 
-	local install_dir = utils.get_install_dir(plugin, "update")
+	local install_dir = utils.get_install_dir(plugin, "update", package_path)
 	if vim.fn.isdirectory(install_dir) ~= 1 then
 		return callback(false, "Directory is not found")
 	end
@@ -141,12 +141,12 @@ function M.check_plugin(plugin, callback)
 	table.insert(jobs, job)
 end
 
-function M.update_plugin(plugin, callback)
+function M.update_plugin(plugin, git_config, package_path, callback)
 	if is_update_aborted then
 		return callback(false, "Stop")
 	end
 
-	local install_dir = utils.get_install_dir(plugin, "update")
+	local install_dir = utils.get_install_dir(plugin, "update", package_path)
 	local cmd = string.format("cd %s && git pull --quiet && git submodule update --init --recursive", install_dir)
 
 	local job = utils.execute_command(cmd, function(ok, output)

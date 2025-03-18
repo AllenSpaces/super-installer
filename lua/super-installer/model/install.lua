@@ -14,7 +14,7 @@ function M.start(config)
 		table.insert(plugins, plugin)
 	end
 
-	local install_dir = vim.fn.stdpath("data") .. "/site/pack/packer/start"
+	local install_dir = config.install.package_path
 
 	local existing_plugins = {}
 	for _, path in ipairs(vim.split(vim.fn.glob(install_dir .. "/*"), "\n")) do
@@ -69,7 +69,7 @@ function M.start(config)
 		local plugin = pending_install[index]
 		ui.update_progress(progress_win, "Installing: " .. plugin, index, total, config.ui)
 
-		M.install_plugin(plugin, config.git, function(success, err)
+		M.install_plugin(plugin, config.git, config.install.package_path, function(success, err)
 			if success then
 				installed_count = installed_count + 1
 			else
@@ -82,13 +82,13 @@ function M.start(config)
 	process_next(1)
 end
 
-function M.install_plugin(plugin, git_config, callback)
+function M.install_plugin(plugin, git_config, package_path, callback)
 	if not installation_active then
 		return
 	end
 
 	local repo_url = utils.get_repo_url(plugin, git_config)
-	local target_dir = utils.get_install_dir(plugin, "start")
+	local target_dir = utils.get_install_dir(plugin, "start", package_path)
 
 	local command = vim.fn.isdirectory(target_dir) == 1 and string.format("cd %s && git pull --rebase", target_dir)
 		or string.format("git clone --depth 1 %s %s", repo_url, target_dir)

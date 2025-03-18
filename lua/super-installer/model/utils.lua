@@ -38,17 +38,15 @@ function M.execute_command(cmd, callback)
 	return job_id
 end
 
-function M.get_install_dir(plugin, command_type)
+function M.get_install_dir(plugin, command_type, package_path)
 	assert(type(plugin) == "string", "Invalid plugin name: " .. tostring(plugin))
 	assert(type(command_type) == "string", "Invalid type parameter: " .. tostring(command_type))
-
-	local base_path = vim.fn.has("win32") == 1 and (vim.fn.expand("$env:LOCALAPPDATA") .. "\\nvim-data")
-		or vim.fn.stdpath("data")
+	assert(type(package_path) == "string", "Invalid package_path: " .. tostring(package_path))
 
 	local plugin_name = plugin:match("/([^/]+)$") or plugin:match("([^/]+)%.git$") or plugin
 	plugin_name = plugin_name:gsub("%.git$", "")
 
-	return string.format("%s/site/pack/packer/start/%s", base_path, plugin_name)
+	return string.format("%s/%s", package_path, plugin_name)
 end
 
 function M.get_repo_url(plugin, git_type)

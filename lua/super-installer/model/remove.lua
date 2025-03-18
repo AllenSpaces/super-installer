@@ -15,7 +15,7 @@ function M.start(config)
 		required_plugins[spec:match("/([^/]+)$")] = true
 	end
 
-	local packer_path = vim.fn.stdpath("data") .. "/site/pack/packer/start"
+	local packer_path = config.install.package_path
 	local installed_plugins = vim.split(vim.fn.glob(packer_path .. "/*"), "\n")
 
 	local removal_candidates = {}
@@ -55,7 +55,7 @@ function M.start(config)
 			config.ui
 		)
 
-		M.remove_plugin(plugin, function(success, err)
+		M.remove_plugin(plugin, config.install.package_path, function(success, err)
 			if success then
 				removed_count = removed_count + 1
 			else
@@ -68,8 +68,8 @@ function M.start(config)
 	process_next(1)
 end
 
-function M.remove_plugin(plugin_name, callback)
-	local install_path = utils.get_install_dir(plugin_name, "start")
+function M.remove_plugin(plugin_name, package_path, callback)
+	local install_path = utils.get_install_dir(plugin_name, "start", package_path)
 
 	if vim.fn.isdirectory(install_path) ~= 1 then
 		callback(true)
