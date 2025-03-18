@@ -35,11 +35,11 @@ function M.update_progress(win, text, completed, total, ui)
 
 	vim.api.nvim_buf_set_lines(win.buf, 0, -1, false, {
 		"",
-		center_text(text, 67),
+		center_text(text, 68),
 		"",
-		center_text("Press 'q' to cease the operation", 67),
+		center_text("Press 'q' to cease the operation", 68),
 		"",
-		center_text(progress_bar, 67),
+		center_text(progress_bar, 68),
 		"",
 	})
 	vim.api.nvim_buf_set_keymap(win.buf, "n", "q", "<cmd>q!<CR>", { noremap = true, silent = true })
@@ -86,13 +86,13 @@ function M.show_report(errors, success_count, total, operation)
 
 	if #errors > 0 then
 		table.insert(content, "")
-		table.insert(content, center_text("Errors (" .. #errors .. "):", 67))
+		table.insert(content, center_text("Errors (" .. #errors .. "):", 68))
 		table.insert(content, "")
 		for i, e in ipairs(errors) do
-			table.insert(content, center_text(string.format("%d. %s: %s", i, e.plugin, e.error), 67))
+			table.insert(content, center_text(string.format("%d. %s: %s", i, e.plugin, e.error), 68))
 			table.insert(content, "")
 			if i >= 5 then
-				table.insert(content, center_text("... (truncated)", 67))
+				table.insert(content, center_text("... (truncated)", 68))
 				table.insert(content, "")
 				break
 			end
@@ -101,14 +101,14 @@ function M.show_report(errors, success_count, total, operation)
 		table.insert(content, "")
 		table.insert(
 			content,
-			center_text(operation .. " Results (" .. success_count .. "/" .. total .. " successful)", 67)
+			center_text(operation .. " Results (" .. success_count .. "/" .. total .. " successful)", 68)
 		)
 		table.insert(content, "")
-		table.insert(content, center_text("✓ All operations completed successfully!", 67))
+		table.insert(content, center_text("✓ All operations completed successfully!", 68))
 	end
 
 	table.insert(content, "")
-	table.insert(content, center_text("Press 'q' to quit", 67))
+	table.insert(content, center_text("Press 'q' to quit", 68))
 
 	local win = M.create_window(operation .. " Report", content)
 	vim.api.nvim_buf_set_lines(win.buf, 0, -1, false, content)
