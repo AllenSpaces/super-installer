@@ -56,9 +56,9 @@ M.setup = function(user_config)
 	end, {})
 
 	local keymap_options = { noremap = true, silent = true }
-	vim.keymap.set("n", M.config.keymaps.install, "<cmd>SuperInstall<CR>", keymap_options)
-	vim.keymap.set("n", M.config.keymaps.remove, "<cmd>SuperRemove<CR>", keymap_options)
-	vim.keymap.set("n", M.config.keymaps.update, "<cmd>SuperUpdate<CR>", keymap_options)
+	vim.keymap.set("n", config.keymaps.install, "<cmd>SuperInstall<CR>", keymap_options)
+	vim.keymap.set("n", config.keymaps.remove, "<cmd>SuperRemove<CR>", keymap_options)
+	vim.keymap.set("n", config.keymaps.update, "<cmd>SuperUpdate<CR>", keymap_options)
 
 	if M.config.install.auto_update then
 		vim.api.nvim_create_autocmd("VimEnter", {

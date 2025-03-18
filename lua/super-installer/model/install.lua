@@ -16,6 +16,8 @@ function M.start(config)
 
 	local install_dir = config.install.package_path
 
+		
+
 	local existing_plugins = {}
 	for _, path in ipairs(vim.split(vim.fn.glob(install_dir .. "/*"), "\n")) do
 		existing_plugins[vim.fn.fnamemodify(path, ":t")] = true
@@ -30,6 +32,7 @@ function M.start(config)
 	end
 
 	if #pending_install == 0 then
+		ui.log_message(install_dir)
 		ui.log_message("All plugins are already installed.")
 		return
 	end
