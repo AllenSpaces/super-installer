@@ -32,7 +32,6 @@ function M.start(config)
 	end
 
 	if #pending_install == 0 then
-		ui.log_message(install_dir)
 		ui.log_message("All plugins are already installed.")
 		return
 	end
