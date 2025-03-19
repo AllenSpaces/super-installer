@@ -52,7 +52,7 @@ M.setup = function(user_config)
 	vim.keymap.set("n", config.keymaps.remove, "<cmd>SuperRemove<CR>", keymap_options)
 	vim.keymap.set("n", config.keymaps.update, "<cmd>SuperUpdate<CR>", keymap_options)
 
-	if M.config.install.auto_download then
+	if config.install.auto_download then
 		vim.api.nvim_create_autocmd("VimEnter", {
 			pattern = { "*" },
 			callback = function()
