@@ -56,15 +56,7 @@ M.setup = function(user_config)
 		vim.api.nvim_create_autocmd("VimEnter", {
 			pattern = { "*" },
 			callback = function()
-				local installer, _ = pcall(vim.fn.execute, "SuperInstall")
-				local need_install = require("super-installer.model.install").need_install
-				if need_install then
-					if not installer then
-						vim.notify("Check SuperInstaller Status", vim.log.levels.WARN, { title = "SuperInstaller" })
-					end
-				else
-					return false
-				end
+				vim.fn.execute("SuperInstall")
 			end,
 		})
 	end
