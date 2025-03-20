@@ -2,13 +2,13 @@ local M = {}
 
 M.setup = function(user_config)
 	local default_config = {
-		git = "https",
+		methods = "https",
 
 		install = {
 			default = "wukuohao2003/super-installer",
 			auto_download = false,
 			package_path = os.getenv("HOME") .. "/.super/package",
-			use = {},
+			packages = {},
 		},
 
 		keymaps = {

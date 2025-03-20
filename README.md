@@ -32,7 +32,8 @@ You can customize the plugin by passing a configuration table to the `setup` fun
 ```lua
 require('super-installer').setup({
     -- Installation method, can be "ssh" or "https"
-    git = "ssh",
+    -- git = "ssh", Attention: deprecated
+    method = "ssh"
 
     -- Plugins to install
     install = {
@@ -44,7 +45,23 @@ require('super-installer').setup({
         package_path = "",
 
         -- Additional plugins to install, format: "{username}/{repo}"
-        use = {}
+        -- use = {} Attention: deprecated
+        packages = {}
+    },
+
+    ui = {
+        progress = {
+            icon = ""
+        },
+        manager = {
+            icon = {
+                install = "",
+                update = "",
+                remove = "",
+                check = "",
+                package = ""
+            }
+        }
     },
 
     -- Key mappings

@@ -10,13 +10,11 @@ function M.start(config)
 
 	local plugins = {}
 	table.insert(plugins, config.install.default)
-	for _, plugin in ipairs(config.install.use) do
+	for _, plugin in ipairs(config.install.packages) do
 		table.insert(plugins, plugin)
 	end
 
 	local install_dir = config.install.package_path
-
-		
 
 	local existing_plugins = {}
 	for _, path in ipairs(vim.split(vim.fn.glob(install_dir .. "/*"), "\n")) do
@@ -71,7 +69,7 @@ function M.start(config)
 		local plugin = pending_install[index]
 		ui.update_progress(progress_win, "Installing: " .. plugin, index, total, config.ui)
 
-		M.install_plugin(plugin, config.git, config.install.package_path, function(success, err)
+		M.install_plugin(plugin, config.methods, config.install.package_path, function(success, err)
 			if success then
 				installed_count = installed_count + 1
 			else

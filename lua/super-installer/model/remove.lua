@@ -7,7 +7,7 @@ function M.start(config)
 	local required_plugins = {}
 	local plugin_specs = { config.install.default }
 
-	for _, spec in ipairs(config.install.use) do
+	for _, spec in ipairs(config.install.packages) do
 		table.insert(plugin_specs, spec)
 	end
 

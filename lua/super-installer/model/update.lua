@@ -14,7 +14,7 @@ function M.start(config)
 	plugins_to_update = {}
 	jobs = {}
 
-	local plugins = config.install.use
+	local plugins = config.install.packages
 	table.insert(plugins, 1, config.install.default)
 	plugins = utils.table_duplicates(plugins)
 
