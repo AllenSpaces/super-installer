@@ -111,7 +111,7 @@ function M.start(config)
 	check_next_plugin(1, progress_win_check)
 end
 
-function M.check_plugin(plugin, git_config, package_path, callback)
+function M.check_plugin(plugin, package_path, callback)
 	if is_update_aborted then
 		return callback(false, "Stop")
 	end
@@ -141,7 +141,7 @@ function M.check_plugin(plugin, git_config, package_path, callback)
 	table.insert(jobs, job)
 end
 
-function M.update_plugin(plugin, git_config, package_path, callback)
+function M.update_plugin(plugin, package_path, callback)
 	if is_update_aborted then
 		return callback(false, "Stop")
 	end

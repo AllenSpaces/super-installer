@@ -23,12 +23,12 @@ You can customize the plugin by passing a configuration table to the `setup` fun
 ```lua
 require('super-installer').setup({
     -- Installation method, can be "ssh" or "https"
-    git = "ssh",
+    methods = "ssh",
 
     -- Plugins to install
     install = {
         -- Additional plugins to install, format: "{username}/{repo}"
-        use = {}
+        packages = {}
     },
 
     -- Key mappings
