@@ -58,7 +58,7 @@ function M.start(config)
 			config.ui
 		)
 
-		M.update_plugin(plugin, config.git, config.install.package_path, function(ok, err)
+		M.update_plugin(plugin, config.install.package_path, function(ok, err)
 			if ok then
 				success_count = success_count + 1
 			else
@@ -98,7 +98,7 @@ function M.start(config)
 			config.ui
 		)
 
-		M.check_plugin(plugin, config.git, config.install.package_path, function(ok, result)
+		M.check_plugin(plugin, config.install.package_path, function(ok, result)
 			if ok and result == "need_update" then
 				table.insert(plugins_to_update, plugin)
 			elseif not ok then
