@@ -5,7 +5,7 @@ M.setup = function(user_config)
 		methods = "https",
 
 		install = {
-			default = "wukuohao2003/super-installer",
+			default = "AllenSpaces/super-installer",
 			auto_download = false,
 			package_path = os.getenv("HOME") .. "/.super/package",
 			packages = {},
