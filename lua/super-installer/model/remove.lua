@@ -5,11 +5,11 @@ local M = {}
 
 function M.start(config)
 	-- 从 config_path 读取配置文件
-	local configs = utils.load_config_files(config.install.config_path)
+	local configs = utils.load_config_files(config.opts.config_path)
 	
 	-- 添加默认插件
 	local default_config = {
-		repo = config.install.default,
+		repo = config.opts.default,
 		branch = "main",
 		config = {},
 	}
@@ -34,7 +34,7 @@ function M.start(config)
 		end
 	end
 
-	local packer_path = config.install.package_path
+	local packer_path = config.opts.package_path
 	local installed_plugins = vim.split(vim.fn.glob(packer_path .. "/*"), "\n")
 
 	local removal_candidates = {}
@@ -74,7 +74,7 @@ function M.start(config)
 			config.ui
 		)
 
-		M.remove_plugin(plugin, config.install.package_path, function(success, err)
+		M.remove_plugin(plugin, config.opts.package_path, function(success, err)
 			if success then
 				removed_count = removed_count + 1
 			else

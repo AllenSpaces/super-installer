@@ -4,11 +4,11 @@ M.setup = function(user_config)
 	local default_config = {
 		methods = "https",
 
-	install = {
-		default = "AllenSpaces/super-installer",
-		package_path = os.getenv("HOME") .. "/.super/package",
-		config_path = os.getenv("HOME") .. "/.config/nvim",
-	},
+		opts = {
+			default = "AllenSpaces/super-installer",
+			package_path = os.getenv("HOME") .. "/.super/package",
+			config_path = os.getenv("HOME") .. "/.config/nvim",
+		},
 
 		keymaps = {
 			install = "<leader>si",
