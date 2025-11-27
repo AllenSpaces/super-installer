@@ -57,6 +57,8 @@ function M.start(config)
 	local total = #plugins
 	local errors = {}
 	local success_count = 0
+	local check_completed = 0
+	local update_completed = 0
 	local progress_win_check = ui.create_window("Checking Plugins", 68)
 
 	vim.api.nvim_create_autocmd("WinClosed", {
@@ -72,7 +74,7 @@ function M.start(config)
 	local function update_next_plugin(index, win)
 		if is_update_aborted or index > #plugins_to_update then
 			local msg = is_update_aborted and "Stop" or "Success"
-			ui.update_progress(win, msg, #plugins_to_update, #plugins_to_update, config.ui)
+			ui.update_progress(win, msg, #plugins_to_update, #plugins_to_update, config.opts.ui)
 			vim.defer_fn(function()
 				vim.api.nvim_win_close(win.win_id, true)
 				ui.show_report(errors, success_count, #plugins_to_update, "Update")
@@ -85,13 +87,14 @@ function M.start(config)
 		plugin_name = plugin_name:gsub("%.git$", "")
 		ui.update_progress(
 			win,
-			config.ui.manager.icon.update .. " Updating: " .. plugin_name,
-			index,
+			config.opts.ui.icons.update .. " Updating: " .. plugin_name,
+			update_completed,
 			#plugins_to_update,
-			config.ui
+			config.opts.ui
 		)
 
 		M.update_plugin(plugin, config.opts.package_path, function(ok, err)
+			update_completed = update_completed + 1
 			if ok then
 				success_count = success_count + 1
 			else
@@ -127,13 +130,14 @@ function M.start(config)
 		plugin_name = plugin_name:gsub("%.git$", "")
 		ui.update_progress(
 			progress_win_check,
-			config.ui.manager.icon.check .. " Checking: " .. plugin_name,
-			index,
+			config.opts.ui.icons.check .. " Checking: " .. plugin_name,
+			check_completed,
 			total,
-			config.ui
+			config.opts.ui
 		)
 
 		M.check_plugin(plugin, config.opts.package_path, function(ok, result)
+			check_completed = check_completed + 1
 			if ok and result == "need_update" then
 				table.insert(plugins_to_update, plugin)
 			elseif not ok then

@@ -102,7 +102,8 @@ function M.start(config)
 	local total = #pending_install
 	local errors = {}
 	local installed_count = 0
-	local progress_win = ui.create_window(config.ui.manager.icon.install .. " Plugin Installation Progress", 68)
+	local completed = 0
+	local progress_win = ui.create_window(config.opts.ui.icons.download .. " Plugin Installation Progress", 68)
 
 	vim.api.nvim_create_autocmd("WinClosed", {
 		buffer = progress_win.buf,
@@ -119,10 +120,10 @@ function M.start(config)
 		if index > total then
 			ui.update_progress(
 				progress_win,
-				config.ui.manager.icon.install .. " Finalizing installation...",
+				config.opts.ui.icons.download .. " Finalizing installation...",
 				total,
 				total,
-				config.ui
+				config.opts.ui
 			)
 			vim.defer_fn(function()
 				vim.api.nvim_win_close(progress_win.win_id, true)
@@ -134,9 +135,10 @@ function M.start(config)
 		local plugin_config = pending_install[index]
 		local plugin_name = plugin_config.repo:match("([^/]+)$")
 		plugin_name = plugin_name:gsub("%.git$", "")
-		ui.update_progress(progress_win, "Installing: " .. plugin_name, index, total, config.ui)
+		ui.update_progress(progress_win, "Installing: " .. plugin_name, completed, total, config.opts.ui)
 
-		M.install_plugin(plugin_config, config.methods, config.opts.package_path, function(success, err)
+		M.install_plugin(plugin_config, config.method, config.opts.package_path, function(success, err)
+			completed = completed + 1
 			if success then
 				installed_count = installed_count + 1
 			else

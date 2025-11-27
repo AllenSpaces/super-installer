@@ -2,33 +2,30 @@ local M = {}
 
 M.setup = function(user_config)
 	local default_config = {
-		methods = "https",
+		method = "https",
 
 		opts = {
 			default = "OriginCoderPulse/synapse.nvim",
-			package_path = os.getenv("HOME") .. "/.super/package",
+			package_path = os.getenv("HOME") .. "/.synapse/package",
 			config_path = os.getenv("HOME") .. "/.config/nvim",
-		},
 
-		keymaps = {
-			install = "<leader>si",
-			remove = "<leader>sr",
-			update = "<leader>su",
-		},
-
-		ui = {
-			progress = {
-				icon = "",
-			},
-			manager = {
-				icon = {
-					install = "",
-					update = "",
+			ui = {
+				style = "float",
+				icons = {
+					download = "",
+					update = "󰚰",
 					remove = "󰺝",
 					check = "󱫁",
 					package = "󰏖",
+					progress = "",
 				},
 			},
+		},
+
+		keys = {
+			download = "<leader>si",
+			remove = "<leader>sr",
+			upgrade = "<leader>su",
 		},
 	}
 
@@ -47,17 +44,9 @@ M.setup = function(user_config)
 	end, {})
 
 	local keymap_options = { noremap = true, silent = true }
-	vim.keymap.set("n", config.keymaps.install, "<cmd>SynapseDownload<CR>", keymap_options)
-	vim.keymap.set("n", config.keymaps.remove, "<cmd>SynapseRemove<CR>", keymap_options)
-	vim.keymap.set("n", config.keymaps.update, "<cmd>SynapseUpgrade<CR>", keymap_options)
-
-	-- 默认自动安装
-	vim.api.nvim_create_autocmd("VimEnter", {
-		pattern = { "*" },
-		callback = function()
-			vim.fn.execute("SynapseDownload")
-		end,
-	})
+	vim.keymap.set("n", config.keys.download, "<cmd>SynapseDownload<CR>", keymap_options)
+	vim.keymap.set("n", config.keys.remove, "<cmd>SynapseRemove<CR>", keymap_options)
+	vim.keymap.set("n", config.keys.upgrade, "<cmd>SynapseUpgrade<CR>", keymap_options)
 end
 
 return M
