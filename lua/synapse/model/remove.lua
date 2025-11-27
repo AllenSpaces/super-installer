@@ -1,5 +1,5 @@
-local ui = require("super-installer.model.ui")
-local utils = require("super-installer.model.utils")
+local ui = require("synapse.model.ui")
+local utils = require("synapse.model.utils")
 
 local M = {}
 
@@ -40,7 +40,7 @@ function M.start(config)
 	local removal_candidates = {}
 	for _, path in ipairs(installed_plugins) do
 		local name = vim.fn.fnamemodify(path, ":t")
-		if not required_plugins[name] and name ~= "super-installer" then
+		if not required_plugins[name] and name ~= "synapse" and name ~= "synapse.nvim" then
 			table.insert(removal_candidates, name)
 		end
 	end

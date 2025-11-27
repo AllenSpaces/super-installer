@@ -1,5 +1,5 @@
-local ui = require("super-installer.model.ui")
-local utils = require("super-installer.model.utils")
+local ui = require("synapse.model.ui")
+local utils = require("synapse.model.utils")
 
 local M = {}
 
@@ -89,7 +89,7 @@ function M.start(config)
 	for repo, plugin_config in pairs(all_plugins) do
 		local plugin_name = repo:match("([^/]+)$")
 		plugin_name = plugin_name:gsub("%.git$", "")
-		if not existing_plugins[plugin_name] and plugin_name ~= "super-installer" then
+		if not existing_plugins[plugin_name] and plugin_name ~= "synapse" and plugin_name ~= "synapse.nvim" then
 			table.insert(pending_install, plugin_config)
 		end
 	end

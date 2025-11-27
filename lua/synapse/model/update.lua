@@ -1,5 +1,5 @@
-local ui = require("super-installer.model.ui")
-local utils = require("super-installer.model.utils")
+local ui = require("synapse.model.ui")
+local utils = require("synapse.model.utils")
 
 local M = {}
 

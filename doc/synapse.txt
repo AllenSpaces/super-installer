@@ -1,23 +1,23 @@
-*super-installer.txt*  Super Installer 插件管理器文档
+*synapse.txt*  Synapse 插件管理器文档
 
 ==============================================================================
-目录                                                      *super-installer*
+目录                                                      *synapse*
 ==============================================================================
 
-    1. 简介 ................ |super-installer-introduction|
-    2. 安装 ................ |super-installer-installation|
-    3. 配置 ................ |super-installer-configuration|
-    4. 配置文件格式 ........ |super-installer-config-format|
-    5. 使用方法 ............ |super-installer-usage|
-    6. 依赖项管理 .......... |super-installer-dependencies|
-    7. 配置选项 ............ |super-installer-options|
-    8. 常见问题 ............ |super-installer-faq|
+    1. 简介 ................ |synapse-introduction|
+    2. 安装 ................ |synapse-installation|
+    3. 配置 ................ |synapse-configuration|
+    4. 配置文件格式 ........ |synapse-config-format|
+    5. 使用方法 ............ |synapse-usage|
+    6. 依赖项管理 .......... |synapse-dependencies|
+    7. 配置选项 ............ |synapse-options|
+    8. 常见问题 ............ |synapse-faq|
 
 ==============================================================================
-简介                                                      *super-installer-introduction*
+简介                                                      *synapse-introduction*
 ==============================================================================
 
-Super Installer 是一个 Neovim 插件管理器，用于简化插件的安装、移除和更新
+Synapse 是一个 Neovim 插件管理器，用于简化插件的安装、移除和更新
 过程。它提供了友好的 UI 界面来显示操作进度和错误信息。
 
 主要特性：
@@ -28,28 +28,28 @@ Super Installer 是一个 Neovim 插件管理器，用于简化插件的安装�
     - 启动时自动安装
 
 ==============================================================================
-安装                                                      *super-installer-installation*
+安装                                                      *synapse-installation*
 ==============================================================================
 
 Mac/Linux: ~
-    git clone https://github.com/AllenSpaces/super-installer \
-        ~/.nvim-utils/package/super-installer
+    git clone https://github.com/OriginCoderPulse/synapse.nvim \
+        ~/.nvim-utils/package/synapse.nvim
 
 Windows: ~
-    git clone https://github.com/AllenSpaces/super-installer \
+    git clone https://github.com/OriginCoderPulse/synapse.nvim \
         "$env:LOCALAPPDATA\nvim-data\site\pack/packer/start"
 
 ==============================================================================
-配置                                                      *super-installer-configuration*
+配置                                                      *synapse-configuration*
 ==============================================================================
 
 基本配置: ~
 
-    require('super-installer').setup({
+    require('synapse').setup({
         methods = "https",  -- 或 "ssh"
         
         opts = {
-            default = "AllenSpaces/super-installer",
+            default = "OriginCoderPulse/synapse.nvim",
             package_path = os.getenv("HOME") .. "/.super/package",
             config_path = os.getenv("HOME") .. "/.config/nvim",
         },
@@ -62,10 +62,10 @@ Windows: ~
     })
 
 ==============================================================================
-配置文件格式                                              *super-installer-config-format*
+配置文件格式                                              *synapse-config-format*
 ==============================================================================
 
-Super Installer 会从 `config_path` 目录递归扫描所有 `.lua` 文件，读取插件
+Synapse 会从 `config_path` 目录递归扫描所有 `.lua` 文件，读取插件
 配置。
 
 基本格式: ~
@@ -120,30 +120,30 @@ Super Installer 会从 `config_path` 目录递归扫描所有 `.lua` 文件，�
     }
 
 ==============================================================================
-使用方法                                                  *super-installer-usage*
+使用方法                                                  *synapse-usage*
 ==============================================================================
 
 安装插件: ~
-    默认情况下，Super Installer 会在 Neovim 启动时自动安装缺失的插件。
+    默认情况下，Synapse 会在 Neovim 启动时自动安装缺失的插件。
     
     手动安装：
     - 快捷键：<leader>si
-    - 命令：:SuperInstall
+    - 命令：:SynapseDownload
 
 更新插件: ~
     - 快捷键：<leader>su
-    - 命令：:SuperUpdate
+    - 命令：:SynapseUpgrade
 
 移除插件: ~
     移除所有不在配置文件中定义的插件：
     - 快捷键：<leader>sr
-    - 命令：:SuperRemove
+    - 命令：:SynapseRemove
 
 ==============================================================================
-依赖项管理                                              *super-installer-dependencies*
+依赖项管理                                              *synapse-dependencies*
 ==============================================================================
 
-Super Installer 会自动处理插件的依赖项：
+Synapse 会自动处理插件的依赖项：
 
 1. 自动安装：安装主插件时，会自动安装其所有依赖项
 2. 去重处理：多个插件共享同一依赖项时，只会安装一次
@@ -155,31 +155,31 @@ Super Installer 会自动处理插件的依赖项：
     否则使用默认配置（branch: "main"）。
 
 ==============================================================================
-配置选项                                                  *super-installer-options*
+配置选项                                                  *synapse-options*
 ==============================================================================
 
-methods                                    *super-installer-options-methods*
+methods                                    *synapse-options-methods*
     类型：String
     默认值："https"
     可选值："ssh" 或 "https"
     说明：Git 克隆协议
 
-opts.default                                *super-installer-options-default*
+opts.default                                *synapse-options-default*
     类型：String
-    默认值："AllenSpaces/super-installer"
+    默认值："OriginCoderPulse/synapse.nvim"
     说明：默认插件仓库地址
 
-opts.package_path                           *super-installer-options-package-path*
+opts.package_path                           *synapse-options-package-path*
     类型：String
     默认值：~/.super/package
     说明：插件安装路径
 
-opts.config_path                            *super-installer-options-config-path*
+opts.config_path                            *synapse-options-config-path*
     类型：String
     默认值：~/.config/nvim
     说明：配置文件目录，会递归扫描所有 .lua 文件
 
-keymaps                                    *super-installer-options-keymaps*
+keymaps                                    *synapse-options-keymaps*
     类型：Table
     说明：快捷键映射
     - install：安装插件（默认：<leader>si）
@@ -188,26 +188,26 @@ keymaps                                    *super-installer-options-keymaps*
 
 配置文件字段: ~
 
-repo                                       *super-installer-config-repo*
+repo                                       *synapse-config-repo*
     类型：String（必需）
     格式："username/repo-name" 或完整 URL
     说明：插件仓库地址
 
-clone_conf                                 *super-installer-config-clone-conf*
+clone_conf                                 *synapse-config-clone-conf*
     类型：Table（可选）
     说明：克隆配置
     - branch：克隆分支，默认为 "main"
 
-depend                                     *super-installer-config-depend*
+depend                                     *synapse-config-depend*
     类型：Array of Strings（可选）
     说明：依赖项列表，格式为 "username/repo-name"
 
-config                                     *super-installer-config-config*
+config                                     *synapse-config-config*
     类型：Function（可选）
     说明：插件配置函数
 
 ==============================================================================
-常见问题                                                  *super-installer-faq*
+常见问题                                                  *synapse-faq*
 ==============================================================================
 
 Q: 插件没有被识别？ ~

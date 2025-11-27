@@ -1,6 +1,6 @@
-# Super Installer
+# Synapse
 
-Super Installer 是一个 Neovim 插件管理器，用于简化插件的安装、移除和更新过程。它提供了友好的 UI 界面来显示操作进度和错误信息。
+Synapse 是一个 Neovim 插件管理器，用于简化插件的安装、移除和更新过程。它提供了友好的 UI 界面来显示操作进度和错误信息。
 
 ## 特性
 
@@ -15,13 +15,13 @@ Super Installer 是一个 Neovim 插件管理器，用于简化插件的安装�
 ### Mac/Linux
 
 ```bash
-git clone https://github.com/AllenSpaces/super-installer ~/.nvim-utils/package/super-installer
+git clone https://github.com/OriginCoderPulse/synapse.nvim ~/.nvim-utils/package/synapse.nvim
 ```
 
 ### Windows
 
 ```bash
-git clone https://github.com/AllenSpaces/super-installer "$env:LOCALAPPDATA\nvim-data\site\pack/packer/start"
+git clone https://github.com/OriginCoderPulse/synapse.nvim "$env:LOCALAPPDATA\nvim-data\site\pack/packer/start"
 ```
 
 ## 配置
@@ -31,16 +31,16 @@ git clone https://github.com/AllenSpaces/super-installer "$env:LOCALAPPDATA\nvim
 在你的 Neovim 配置文件中添加以下内容：
 
 ```lua
-require('super-installer').setup({
+require('synapse').setup({
     -- Git 克隆方式，可选 "ssh" 或 "https"
     methods = "https",
 
     opts = {
-        -- 默认插件（通常是 super-installer 本身）
-        default = "AllenSpaces/super-installer",
+        -- 默认插件（通常是 synapse 本身）
+        default = "OriginCoderPulse/synapse.nvim",
         
         -- 插件安装路径
-        package_path = os.getenv("HOME") .. "/.super/package",
+        package_path = os.getenv("HOME") .. "/.synapse/package",
         
         -- 配置文件目录（从此目录读取插件配置）
         config_path = os.getenv("HOME") .. "/.config/nvim",
@@ -71,7 +71,7 @@ require('super-installer').setup({
 
 ### 配置文件格式
 
-在 `config_path` 目录下创建 `.lua` 文件来定义插件配置。Super Installer 会递归扫描该目录下的所有 `.lua` 文件。
+在 `config_path` 目录下创建 `.lua` 文件来定义插件配置。Synapse 会递归扫描该目录下的所有 `.lua` 文件。
 
 配置文件格式：
 
@@ -156,26 +156,26 @@ return {
 
 ### 安装插件
 
-Super Installer 会在 Neovim 启动时自动安装缺失的插件。你也可以手动触发：
+Synapse 会在 Neovim 启动时自动安装缺失的插件。你也可以手动触发：
 
 - **使用快捷键**：按 `<leader>si`（默认）
-- **使用命令**：执行 `:SuperInstall`
+- **使用命令**：执行 `:SynapseDownload`
 
 ### 更新插件
 
 - **使用快捷键**：按 `<leader>su`（默认）
-- **使用命令**：执行 `:SuperUpdate`
+- **使用命令**：执行 `:SynapseUpgrade`
 
 ### 移除未使用的插件
 
 移除所有不在配置文件中定义的插件：
 
 - **使用快捷键**：按 `<leader>sr`（默认）
-- **使用命令**：执行 `:SuperRemove`
+- **使用命令**：执行 `:SynapseRemove`
 
 ## 依赖项管理
 
-Super Installer 会自动处理插件的依赖项：
+Synapse 会自动处理插件的依赖项：
 
 1. **自动安装**：安装主插件时，会自动安装其所有依赖项
 2. **去重处理**：多个插件共享同一依赖项时，只会安装一次
@@ -211,7 +211,7 @@ Super Installer 会自动处理插件的依赖项：
 ### `opts.default`
 
 - **类型**：String
-- **默认值**：`"AllenSpaces/super-installer"`
+- **默认值**：`"OriginCoderPulse/synapse.nvim"`
 - **说明**：默认插件仓库地址
 
 ### `opts.package_path`
@@ -224,7 +224,7 @@ Super Installer 会自动处理插件的依赖项：
 
 - **类型**：String
 - **默认值**：`~/.config/nvim`
-- **说明**：配置文件目录，Super Installer 会递归扫描此目录下的所有 `.lua` 文件
+- **说明**：配置文件目录，Synapse 会递归扫描此目录下的所有 `.lua` 文件
 
 ### `keymaps`
 
