@@ -4,12 +4,11 @@ M.setup = function(user_config)
 	local default_config = {
 		methods = "https",
 
-		install = {
-			default = "AllenSpaces/super-installer",
-			auto_download = false,
-			package_path = os.getenv("HOME") .. "/.super/package",
-			packages = {},
-		},
+	install = {
+		default = "AllenSpaces/super-installer",
+		package_path = os.getenv("HOME") .. "/.super/package",
+		config_path = os.getenv("HOME") .. "/.config/nvim",
+	},
 
 		keymaps = {
 			install = "<leader>si",
@@ -52,14 +51,13 @@ M.setup = function(user_config)
 	vim.keymap.set("n", config.keymaps.remove, "<cmd>SuperRemove<CR>", keymap_options)
 	vim.keymap.set("n", config.keymaps.update, "<cmd>SuperUpdate<CR>", keymap_options)
 
-	if config.install.auto_download then
-		vim.api.nvim_create_autocmd("VimEnter", {
-			pattern = { "*" },
-			callback = function()
-				vim.fn.execute("SuperInstall")
-			end,
-		})
-	end
+	-- 默认自动安装
+	vim.api.nvim_create_autocmd("VimEnter", {
+		pattern = { "*" },
+		callback = function()
+			vim.fn.execute("SuperInstall")
+		end,
+	})
 end
 
 return M

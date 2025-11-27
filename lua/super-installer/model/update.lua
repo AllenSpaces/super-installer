@@ -14,9 +14,40 @@ function M.start(config)
 	plugins_to_update = {}
 	jobs = {}
 
-	local plugins = config.install.packages
-	table.insert(plugins, 1, config.install.default)
-	plugins = utils.table_duplicates(plugins)
+	-- 从 config_path 读取配置文件
+	local configs = utils.load_config_files(config.install.config_path)
+	
+	-- 添加默认插件
+	local default_config = {
+		repo = config.install.default,
+		branch = "main",
+		config = {},
+	}
+	table.insert(configs, 1, default_config)
+
+	-- 提取所有 repo 字段（包括依赖项）
+	local plugins = {}
+	local plugin_set = {}
+	
+	for _, plugin_config in ipairs(configs) do
+		if plugin_config.repo then
+			-- 添加主插件
+			if not plugin_set[plugin_config.repo] then
+				table.insert(plugins, plugin_config.repo)
+				plugin_set[plugin_config.repo] = true
+			end
+			
+			-- 添加依赖项
+			if plugin_config.depend and type(plugin_config.depend) == "table" then
+				for _, dep_repo in ipairs(plugin_config.depend) do
+					if not plugin_set[dep_repo] then
+						table.insert(plugins, dep_repo)
+						plugin_set[dep_repo] = true
+					end
+				end
+			end
+		end
+	end
 
 	if #plugins == 0 then
 		ui.log_message("Noting to update ...")
@@ -50,9 +81,11 @@ function M.start(config)
 		end
 
 		local plugin = plugins_to_update[index]
+		local plugin_name = plugin:match("([^/]+)$")
+		plugin_name = plugin_name:gsub("%.git$", "")
 		ui.update_progress(
 			win,
-			config.ui.manager.icon.update .. " Updating: " .. plugin,
+			config.ui.manager.icon.update .. " Updating: " .. plugin_name,
 			index,
 			#plugins_to_update,
 			config.ui
@@ -62,7 +95,7 @@ function M.start(config)
 			if ok then
 				success_count = success_count + 1
 			else
-				table.insert(errors, { plugin = plugin, error = err })
+				table.insert(errors, { plugin = plugin_name, error = err })
 			end
 			update_next_plugin(index + 1, win)
 		end)
@@ -90,9 +123,11 @@ function M.start(config)
 		end
 
 		local plugin = plugins[index]
+		local plugin_name = plugin:match("([^/]+)$")
+		plugin_name = plugin_name:gsub("%.git$", "")
 		ui.update_progress(
 			progress_win_check,
-			config.ui.manager.icon.check .. " Checking: " .. plugin,
+			config.ui.manager.icon.check .. " Checking: " .. plugin_name,
 			index,
 			total,
 			config.ui
@@ -102,7 +137,7 @@ function M.start(config)
 			if ok and result == "need_update" then
 				table.insert(plugins_to_update, plugin)
 			elseif not ok then
-				table.insert(errors, { plugin = plugin, error = result })
+				table.insert(errors, { plugin = plugin_name, error = result })
 			end
 			check_next_plugin(index + 1, progress_win_check)
 		end)
@@ -116,7 +151,9 @@ function M.check_plugin(plugin, package_path, callback)
 		return callback(false, "Stop")
 	end
 
-	local install_dir = utils.get_install_dir(plugin, "update", package_path)
+	local plugin_name = plugin:match("([^/]+)$")
+	plugin_name = plugin_name:gsub("%.git$", "")
+	local install_dir = utils.get_install_dir(plugin_name, "update", package_path)
 	if vim.fn.isdirectory(install_dir) ~= 1 then
 		return callback(false, "Directory is not found")
 	end
@@ -146,7 +183,9 @@ function M.update_plugin(plugin, package_path, callback)
 		return callback(false, "Stop")
 	end
 
-	local install_dir = utils.get_install_dir(plugin, "update", package_path)
+	local plugin_name = plugin:match("([^/]+)$")
+	plugin_name = plugin_name:gsub("%.git$", "")
+	local install_dir = utils.get_install_dir(plugin_name, "update", package_path)
 	local cmd = string.format("cd %s && git pull --quiet && git submodule update --init --recursive", install_dir)
 
 	local job = utils.execute_command(cmd, function(ok, output)

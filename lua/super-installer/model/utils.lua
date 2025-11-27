@@ -50,7 +50,13 @@ function M.get_install_dir(plugin, command_type, package_path)
 end
 
 function M.get_repo_url(plugin, git_type)
-	assert(plugin and plugin:find("/"), "Invalid plugin format, should be 'user/repo'")
+	-- 如果已经是完整的 URL，直接返回
+	if plugin:match("^https?://") or plugin:match("^git@") then
+		return plugin:gsub("%.git$", "") .. ".git"
+	end
+	
+	-- 否则按照原来的方式处理
+	assert(plugin and plugin:find("/"), "Invalid plugin format, should be 'user/repo' or full URL")
 
 	local base_url = (git_type == "ssh") and "git@github.com:%s.git" or "https://github.com/%s.git"
 
@@ -69,6 +75,88 @@ function M.table_duplicates(tb)
 	end
 
 	return result
+end
+
+-- 递归获取目录下所有 .lua 文件
+local function get_lua_files(dir_path)
+	local files = {}
+	
+	-- 获取当前目录下的 .lua 文件
+	local current_files = vim.split(vim.fn.glob(dir_path .. "/*.lua"), "\n")
+	for _, file in ipairs(current_files) do
+		if file ~= "" then
+			table.insert(files, file)
+		end
+	end
+	
+	-- 递归获取子目录下的文件
+	local subdirs = vim.split(vim.fn.glob(dir_path .. "/*/"), "\n")
+	for _, subdir in ipairs(subdirs) do
+		if subdir ~= "" and vim.fn.isdirectory(subdir) == 1 then
+			local subdir_files = get_lua_files(subdir)
+			for _, file in ipairs(subdir_files) do
+				table.insert(files, file)
+			end
+		end
+	end
+	
+	return files
+end
+
+-- 从 config_path 目录读取所有配置文件（递归扫描）
+function M.load_config_files(config_path)
+	local configs = {}
+	
+	if vim.fn.isdirectory(config_path) ~= 1 then
+		return configs
+	end
+	
+	-- 递归获取所有 .lua 文件
+	local lua_files = get_lua_files(config_path)
+	
+	for _, file_path in ipairs(lua_files) do
+		if file_path ~= "" then
+			local ok, config = pcall(function()
+				-- 加载文件并执行，获取返回的配置表
+				local chunk = loadfile(file_path)
+				if chunk then
+					return chunk()
+				end
+				return nil
+			end)
+			
+			if ok and config and type(config) == "table" then
+				-- 检查是否有 repo 字段
+				if config.repo and type(config.repo) == "string" and config.repo ~= "" then
+					-- 提取配置信息
+					local plugin_config = {
+						repo = config.repo,
+						branch = "main", -- 默认主分支
+						config = config.config or {},
+						depend = {}, -- 依赖项列表
+					}
+					
+					-- 如果有 clone_conf，使用其中的 branch
+					if config.clone_conf and type(config.clone_conf) == "table" and config.clone_conf.branch then
+						plugin_config.branch = config.clone_conf.branch
+					end
+					
+					-- 如果有 depend 字段，提取依赖项
+					if config.depend and type(config.depend) == "table" then
+						for _, dep in ipairs(config.depend) do
+							if type(dep) == "string" and dep ~= "" then
+								table.insert(plugin_config.depend, dep)
+							end
+						end
+					end
+					
+					table.insert(configs, plugin_config)
+				end
+			end
+		end
+	end
+	
+	return configs
 end
 
 return M

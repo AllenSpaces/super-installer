@@ -4,15 +4,34 @@ local utils = require("super-installer.model.utils")
 local M = {}
 
 function M.start(config)
+	-- 从 config_path 读取配置文件
+	local configs = utils.load_config_files(config.install.config_path)
+	
+	-- 添加默认插件
+	local default_config = {
+		repo = config.install.default,
+		branch = "main",
+		config = {},
+	}
+	table.insert(configs, 1, default_config)
+
+	-- 收集所有需要的插件（包括依赖项）
 	local required_plugins = {}
-	local plugin_specs = { config.install.default }
-
-	for _, spec in ipairs(config.install.packages) do
-		table.insert(plugin_specs, spec)
-	end
-
-	for _, spec in ipairs(plugin_specs) do
-		required_plugins[spec:match("/([^/]+)$")] = true
+	for _, plugin_config in ipairs(configs) do
+		if plugin_config.repo then
+			local plugin_name = plugin_config.repo:match("([^/]+)$")
+			plugin_name = plugin_name:gsub("%.git$", "")
+			required_plugins[plugin_name] = true
+			
+			-- 添加依赖项
+			if plugin_config.depend and type(plugin_config.depend) == "table" then
+				for _, dep_repo in ipairs(plugin_config.depend) do
+					local dep_name = dep_repo:match("([^/]+)$")
+					dep_name = dep_name:gsub("%.git$", "")
+					required_plugins[dep_name] = true
+				end
+			end
+		end
 	end
 
 	local packer_path = config.install.package_path
