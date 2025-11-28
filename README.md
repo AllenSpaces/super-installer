@@ -34,13 +34,13 @@ Add to your Neovim configuration:
 ```lua
 require('synapse').setup({
     method = "https",  -- or "ssh"
-    
+
     opts = {
         default = "OriginCoderPulse/synapse.nvim",
         package_path = os.getenv("HOME") .. "/.synapse/package",
         config_path = os.getenv("HOME") .. "/.config/nvim",
     },
-    
+
     keys = {
         download = "<leader>si",
         remove = "<leader>sr",
@@ -72,26 +72,31 @@ require('synapse').setup({
         ui = {
             style = "float",
             header = {
-                "███████╗██╗   ██╗███╗   ██╗ █████╗ ██████╗ ███████╗███████╗",
-                "██╔════╝╚██╗ ██╔╝████╗  ██║██╔══██╗██╔══██╗██╔════╝██╔════╝",
-                "███████╗ ╚████╔╝ ██╔██╗ ██║███████║██████╔╝███████╗█████╗  ",
-                "╚════██║  ╚██╔╝  ██║╚██╗██║██╔══██║██╔═══╝ ╚════██║██╔══╝  ",
-                "███████║   ██║   ██║ ╚████║██║  ██║██║     ███████║███████╗",
-                "╚══════╝   ╚═╝   ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝     ╚══════╝╚══════╝",
+                text = {
+                    "███████╗██╗   ██╗███╗   ██╗ █████╗ ██████╗ ███████╗███████╗",
+                    "██╔════╝╚██╗ ██╔╝████╗  ██║██╔══██╗██╔══██╗██╔════╝██╔════╝",
+                    "███████╗ ╚████╔╝ ██╔██╗ ██║███████║██████╔╝███████╗█████╗  ",
+                    "╚════██║  ╚██╔╝  ██║╚██╗██║██╔══██║██╔═══╝ ╚════██║██╔══╝  ",
+                    "███████║   ██║   ██║ ╚████║██║  ██║██║     ███████║███████╗",
+                    "╚══════╝   ╚═╝   ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝     ╚══════╝╚══════╝",
+                },
+                hl = "SynapseHeader",  -- or use hex color: "#e6d5fb"
             },
-            hl = "#fbe4d5",
+            plug = {
+                hl = "SynapsePlugin",  -- or use hex color: "#d5fbd9"
+            },
             icons = {
-                download = { glyph = "", hl = "SynapseDownload" },
+                download = { glyph = "", hl = "SynapseDownload" },  -- or "#fbe4d5"
                 upgrade = { glyph = "󰚰", hl = "SynapseUpgrade" },
                 remove = { glyph = "󰺝", hl = "SynapseRemove" },
                 check = { glyph = "󱥾", hl = "SynapseCheck" },
-                success = { glyph = "󰘫", hl = "SynapseSuccess" },
-                faild = { glyph = "󰬌", hl = "SynapseFaild" },
+                success = { glyph = "", hl = "SynapseSuccess" },  -- or "#bbc0ed"
+                faild = { glyph = "󰬌", hl = "SynapseFaild" },  -- or "#edbbbb"
                 progress = {
                     glyph = "",
                     hl = {
-                        default = "SynapseProgressDefault",
-                        progress = "SynapseProgress",
+                        default = "SynapseProgressDefault",  -- or "#5c6370"
+                        progress = "SynapseProgress",  -- or "#fbe4d5"
                     },
                 },
             },
@@ -221,9 +226,29 @@ lua/synapse/
 
 - **Type**: `table`
 - **Description**: UI customization options
-  - `header`: Multi-line ASCII art or string
-  - `hl`: Icon highlight color or highlight group name
-  - `icons`: Icon definitions with `glyph` and `hl` fields
+
+#### `opts.ui.header`
+
+- **Type**: `table`
+- **Fields**:
+  - `text`: Array of strings for multi-line ASCII art header
+  - `hl`: Highlight group name or hex color (e.g., `"SynapseHeader"` or `"#e6d5fb"`)
+
+#### `opts.ui.plug`
+
+- **Type**: `table`
+- **Fields**:
+  - `hl`: Highlight group name or hex color for plugin names (e.g., `"SynapsePlugin"` or `"#d5fbd9"`)
+
+#### `opts.ui.icons`
+
+- **Type**: `table`
+- **Description**: Icon definitions for different operations
+- **Fields for each icon**:
+  - `glyph`: Icon character (string)
+  - `hl`: Highlight group name or hex color (e.g., `"SynapseDownload"` or `"#fbe4d5"`)
+
+**Note**: All `hl` parameters support both highlight group names (strings) and hex color values (e.g., `"#bbc0ed"`). When a hex color is provided, a highlight group is automatically created.
 
 ## Dependency Management
 
@@ -277,6 +302,59 @@ return {
         -- Your config
     end,
 }
+```
+
+### Custom UI Colors
+
+You can use hex colors directly in `hl` parameters:
+
+```lua
+require('synapse').setup({
+    opts = {
+        ui = {
+            header = {
+                text = { "Your Header" },
+                hl = "#e6d5fb",  -- Use hex color directly
+            },
+            plug = {
+                hl = "#d5fbd9",  -- Plugin name color
+            },
+            icons = {
+                success = {
+                    glyph = "✓",
+                    hl = "#bbc0ed",  -- Success icon color
+                },
+                faild = {
+                    glyph = "✗",
+                    hl = "#edbbbb",  -- Failure icon color
+                },
+                progress = {
+                    glyph = "▸",
+                    hl = {
+                        default = "#5c6370",  -- Default progress color
+                        progress = "#fbe4d5",  -- Active progress color
+                    },
+                },
+            },
+        },
+    },
+})
+```
+
+Or use highlight group names:
+
+```lua
+require('synapse').setup({
+    opts = {
+        ui = {
+            header = {
+                text = { "Your Header" },
+                hl = "SynapseHeader",  -- Use highlight group name
+            },
+            -- ... other config
+        },
+    },
+})
 ```
 
 ## Troubleshooting

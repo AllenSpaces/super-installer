@@ -15,14 +15,28 @@ M.state = state.state
 function M.open(opts)
 	opts = opts or {}
 	highlights.ensure_highlights(opts.ui, state.state)
-	local win = window.create_window()
+	local win = window.create_window(opts.ui)
 
 	local initial_plugins = opts.plugins or {}
 	local plugin_total = #initial_plugins
 
+	-- Handle new header structure: { text = {...}, hl = "..." } or old string format
 	local new_header = opts.header or opts.title or state.state.header
-	state.state.header = type(new_header) == "string" and new_header or state.state.header
-	state.state.header_lines = string_utils.normalize_header(new_header or state.state.header_lines)
+	if type(new_header) == "table" and new_header.text then
+		-- New structure: { text = {...}, hl = "..." }
+		state.state.header_lines = type(new_header.text) == "table" and new_header.text or { tostring(new_header.text) }
+		state.state.header_hl = new_header.hl
+	elseif type(new_header) == "table" then
+		-- Old array format
+		state.state.header_lines = new_header
+		state.state.header_hl = (opts.ui and opts.ui.header and opts.ui.header.hl)
+	else
+		-- String format
+		state.state.header = type(new_header) == "string" and new_header or state.state.header
+		state.state.header_lines = string_utils.normalize_header(new_header or state.state.header_lines)
+		state.state.header_hl = (opts.ui and opts.ui.header and opts.ui.header.hl)
+	end
+	-- header_hl will be set by highlights.ensure_highlights if not set
 	state.state.icon = string_utils.resolve_icon(opts.icon) or state.state.icon
 	local success_icon_cfg = opts.success_icon or (opts.ui and opts.ui.icons and opts.ui.icons.success)
 	state.state.success_icon = string_utils.resolve_icon(success_icon_cfg) or state.state.success_icon or "✓"
@@ -99,7 +113,7 @@ function M.show_report(errors, success_count, total, opts)
 		state.for_each_entry(function(item)
 			item.status = "done"
 			item.icon = state.state.success_icon
-			item.icon_hl = "SynapseUIPlugin"
+			item.icon_hl = state.state.success_hl or state.state.plugin_hl
 		end)
 		renderer.render_progress(win, opts.ui or state.state.ui)
 		return

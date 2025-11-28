@@ -11,10 +11,7 @@ local M = {
 		show_failures = false,
 		retry_cb = nil,
 		ui = {},
-		progress_hl = {
-			default = "SynapseProgressDefault",
-			progress = "SynapseUIProgress",
-		},
+		progress_hl = {},
 	},
 }
 
@@ -124,14 +121,14 @@ function M.set_plugin_status(name, status)
 
 	if status == "failed" then
 		entry.icon = M.state.failure_icon
-		entry.icon_hl = M.state.failure_icon_hl or M.state.icon_hl
+		entry.icon_hl = M.state.faild_hl or M.state.failure_icon_hl or M.state.icon_hl
 		-- Only remove if there are more than max_visible plugins
 		if #M.state.display + #M.state.queue > M.state.max_visible then
 			M.remove_entry(entry)
 		end
 	elseif status == "done" then
 		entry.icon = M.state.success_icon or entry.icon
-		entry.icon_hl = "SynapseUIPlugin"
+		entry.icon_hl = M.state.success_hl or M.state.plugin_hl
 		-- Only remove if there are more than max_visible plugins
 		if #M.state.display + #M.state.queue > M.state.max_visible then
 			M.remove_entry(entry)

@@ -55,7 +55,7 @@ Basic Setup: ~
     require('synapse').setup({
         -- Git clone method: "ssh" or "https"
         method = "https",
-
+        
         opts = {
             -- Default plugin (usually synapse itself)
             default = "OriginCoderPulse/synapse.nvim",
@@ -70,26 +70,31 @@ Basic Setup: ~
             ui = {
                 style = "float",
                 header = {
-                    "███████╗██╗   ██╗███╗   ██╗ █████╗ ██████╗ ███████╗███████╗",
-                    "██╔════╝╚██╗ ██╔╝████╗  ██║██╔══██╗██╔══██╗██╔════╝██╔════╝",
-                    "███████╗ ╚████╔╝ ██╔██╗ ██║███████║██████╔╝███████╗█████╗  ",
-                    "╚════██║  ╚██╔╝  ██║╚██╗██║██╔══██║██╔═══╝ ╚════██║██╔══╝  ",
-                    "███████║   ██║   ██║ ╚████║██║  ██║██║     ███████║███████╗",
-                    "╚══════╝   ╚═╝   ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝     ╚══════╝╚══════╝",
+                    text = {
+                        "███████╗██╗   ██╗███╗   ██╗ █████╗ ██████╗ ███████╗███████╗",
+                        "██╔════╝╚██╗ ██╔╝████╗  ██║██╔══██╗██╔══██╗██╔════╝██╔════╝",
+                        "███████╗ ╚████╔╝ ██╔██╗ ██║███████║██████╔╝███████╗█████╗  ",
+                        "╚════██║  ╚██╔╝  ██║╚██╗██║██╔══██║██╔═══╝ ╚════██║██╔══╝  ",
+                        "███████║   ██║   ██║ ╚████║██║  ██║██║     ███████║███████╗",
+                        "╚══════╝   ╚═╝   ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝     ╚══════╝╚══════╝",
+                    },
+                    hl = "SynapseHeader",  -- or hex color: "#e6d5fb"
                 },
-                hl = "#fbe4d5",
+                plug = {
+                    hl = "SynapsePlugin",  -- or hex color: "#d5fbd9"
+                },
                 icons = {
-                    download = { glyph = "", hl = "SynapseDownload" },
+                    download = { glyph = "", hl = "SynapseDownload" },  -- or "#fbe4d5"
                     upgrade = { glyph = "󰚰", hl = "SynapseUpgrade" },
                     remove = { glyph = "󰺝", hl = "SynapseRemove" },
                     check = { glyph = "󱥾", hl = "SynapseCheck" },
-                    success = { glyph = "󰘫", hl = "SynapseSuccess" },
-                    faild = { glyph = "󰬌", hl = "SynapseFaild" },
+                    success = { glyph = "", hl = "SynapseSuccess" },  -- or "#bbc0ed"
+                    faild = { glyph = "󰬌", hl = "SynapseFaild" },  -- or "#edbbbb"
                     progress = {
                         glyph = "",
                         hl = {
-                            default = "SynapseProgressDefault",
-                            progress = "SynapseProgress",
+                            default = "SynapseProgressDefault",  -- or "#5c6370"
+                            progress = "SynapseProgress",  -- or "#fbe4d5"
                         },
                     },
                 },
@@ -253,9 +258,38 @@ opts.config_path                          *synapse-options-opts-config-path*
 opts.ui                                          *synapse-options-opts-ui*
     Type: Table
     Description: UI customization options
-    • header: Multi-line ASCII art or string
-    • hl: Icon highlight color or highlight group name
-    • icons: Icon definitions with `glyph` and `hl` fields
+
+    opts.ui.header                                  *synapse-options-ui-header*
+        Type: Table
+        Fields:
+        • text: Array of strings for multi-line ASCII art header
+        • hl: Highlight group name or hex color (e.g., "SynapseHeader" or
+          "#e6d5fb")
+
+    opts.ui.plug                                    *synapse-options-ui-plug*
+        Type: Table
+        Fields:
+        • hl: Highlight group name or hex color for plugin names (e.g.,
+          "SynapsePlugin" or "#d5fbd9")
+
+    opts.ui.icons                                   *synapse-options-ui-icons*
+        Type: Table
+        Description: Icon definitions for different operations
+        Fields for each icon (download, upgrade, remove, check, success,
+        faild, progress):
+        • glyph: Icon character (string)
+        • hl: Highlight group name or hex color (e.g., "SynapseDownload" or
+          "#fbe4d5")
+
+        Note: For progress icon, hl is a table with:
+        • default: Default highlight (e.g., "SynapseProgressDefault" or
+          "#5c6370")
+        • progress: Progress highlight (e.g., "SynapseProgress" or
+          "#fbe4d5")
+
+    Note: All `hl` parameters support both highlight group names (strings)
+    and hex color values (e.g., "#bbc0ed"). When a hex color is provided,
+    a highlight group is automatically created.
 
 keys                                                  *synapse-options-keys*
     Type: Table

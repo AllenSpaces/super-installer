@@ -25,8 +25,9 @@ function M.ensure_keymaps(buf)
 end
 
 --- Create or update floating window
+--- @param ui table|nil UI configuration
 --- @return table win
-function M.create_window()
+function M.create_window(ui)
 	local width, height = calculate_window_size()
 	local config = {
 		relative = "editor",
@@ -43,9 +44,26 @@ function M.create_window()
 		api.nvim_buf_set_lines(M.win_cache.buf, 0, -1, false, {})
 	else
 		local buf = api.nvim_create_buf(false, true)
+		-- Set buffer name
+		api.nvim_buf_set_name(buf, "Synapse")
 		local win_id = api.nvim_open_win(buf, true, config)
 		M.win_cache = { win_id = win_id, buf = buf }
 		M.ensure_keymaps(buf)
+		
+		-- Set cursor to transparent using config highlight groups
+		api.nvim_win_set_option(win_id, "cursorline", false)
+		api.nvim_win_set_option(win_id, "cursorcolumn", false)
+		
+		-- Highlight groups are set by highlights.ensure_highlights
+		
+		-- Create transparent cursor highlight using config group names
+		api.nvim_set_hl(0, "SynapseTransparentCursor", {
+			fg = "NONE",
+			bg = "NONE",
+			blend = 100,
+		})
+		-- Apply transparent cursor to window
+		api.nvim_win_set_option(win_id, "winhl", "Cursor:SynapseTransparentCursor")
 	end
 
 	return M.win_cache

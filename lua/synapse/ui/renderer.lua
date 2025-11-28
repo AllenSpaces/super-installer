@@ -1,6 +1,7 @@
 local api = vim.api
 
-local PADDING = 1
+local VERTICAL_PADDING = 1
+local HORIZONTAL_PADDING = 3
 local namespace = api.nvim_create_namespace("SynapseUI")
 
 local string_utils = require("synapse.utils.string")
@@ -43,8 +44,9 @@ function M.render_progress(win, ui)
 		return
 	end
 
-	local side_padding = PADDING
-	local vertical_padding = PADDING
+	-- Use same padding value for both horizontal and vertical
+	local side_padding = HORIZONTAL_PADDING
+	local vertical_padding = VERTICAL_PADDING
 	local line_specs = {}
 	local content_width = { value = 0 }
 
@@ -116,7 +118,7 @@ function M.render_progress(win, ui)
 		local glyph = ui.icons.progress.glyph or "■"
 		local glyph_bytes = #glyph
 		local bar = string.rep(glyph, filled) .. string.rep(glyph, empty)
-		local meta = string.format("%d/%d (%d%%)", state.state.completed, state.state.total, math.floor(ratio * 100))
+		local meta = string.format("%d/%d", state.state.completed, state.state.total)
 		local progress_content = string.format("%s %s %s", progress_icon, bar, meta)
 		push_line(line_specs, content_width, progress_content, {
 			kind = "progress",
@@ -226,18 +228,20 @@ function M.render_progress(win, ui)
 	api.nvim_buf_clear_namespace(win.buf, namespace, 0, -1)
 
 	-- Apply highlights
+	local header_hl = state.state.header_hl
 	for _, header_idx in ipairs(header_lines) do
-		api.nvim_buf_add_highlight(win.buf, namespace, "SynapseUIHeader", header_idx - 1, 0, -1)
+		api.nvim_buf_add_highlight(win.buf, namespace, header_hl, header_idx - 1, 0, -1)
 	end
 
+	local plugin_hl = state.state.plugin_hl
 	for _, item in ipairs(plugin_highlights) do
 		local line = item.line - 1
 		local icon_hl = item.icon_hl
-			or (item.failure and (state.state.failure_icon_hl or state.state.icon_hl) or state.state.icon_hl)
+			or (item.failure and (state.state.faild_hl or state.state.icon_hl) or state.state.icon_hl)
 		api.nvim_buf_add_highlight(
 			win.buf,
 			namespace,
-			icon_hl or "SynapseUIIcon",
+			icon_hl,
 			line,
 			item.icon_col,
 			item.icon_end
@@ -245,7 +249,7 @@ function M.render_progress(win, ui)
 		api.nvim_buf_add_highlight(
 			win.buf,
 			namespace,
-			"SynapseUIPlugin",
+			plugin_hl,
 			line,
 			item.name_col,
 			item.name_end
@@ -268,8 +272,8 @@ function M.render_progress(win, ui)
 		local bar_total_bytes = bar_width * glyph_bytes
 		local filled_bytes = filled * glyph_bytes
 
-		local default_hl = state.state.progress_hl.default or "SynapseProgressDefault"
-		local progress_hl = state.state.progress_hl.progress or "SynapseUIProgress"
+		local default_hl = state.state.progress_hl.default
+		local progress_hl = state.state.progress_hl.progress
 
 		-- Step 1: Initialize entire bar with default color (gray)
 		if bar_total_bytes > 0 then
