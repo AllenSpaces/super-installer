@@ -1,232 +1,340 @@
-*synapse.txt*  Synapse 插件管理器文档
+*synapse.txt*  Synapse.nvim Plugin Manager Documentation
 
 ==============================================================================
-目录                                                      *synapse*
+CONTENTS                                                  *synapse-contents*
 ==============================================================================
 
-    1. 简介 ................ |synapse-introduction|
-    2. 安装 ................ |synapse-installation|
-    3. 配置 ................ |synapse-configuration|
-    4. 配置文件格式 ........ |synapse-config-format|
-    5. 使用方法 ............ |synapse-usage|
-    6. 依赖项管理 .......... |synapse-dependencies|
-    7. 配置选项 ............ |synapse-options|
-    8. 常见问题 ............ |synapse-faq|
+    1. Introduction ................ |synapse-introduction|
+    2. Installation ................ |synapse-installation|
+    3. Configuration ................ |synapse-configuration|
+    4. Plugin Configuration Format .. |synapse-config-format|
+    5. Usage ....................... |synapse-usage|
+    6. UI Features .................. |synapse-ui|
+    7. Dependency Management ........ |synapse-dependencies|
+    8. Configuration Options ........ |synapse-options|
+    9. Architecture ................ |synapse-architecture|
+   10. Troubleshooting .............. |synapse-troubleshooting|
 
 ==============================================================================
-简介                                                      *synapse-introduction*
+INTRODUCTION                                              *synapse-introduction*
 ==============================================================================
 
-Synapse 是一个 Neovim 插件管理器，用于简化插件的安装、移除和更新
-过程。它提供了友好的 UI 界面来显示操作进度和错误信息。
+Synapse.nvim is a modern, lightweight plugin manager for Neovim with a
+beautiful UI and intelligent dependency management.
 
-主要特性：
-    - 基于配置文件的插件管理
-    - 自动依赖项管理
-    - 支持指定克隆分支
-    - 友好的进度显示
-    - 启动时自动安装
+Features: ~
+    • Configuration-based plugin management
+    • Automatic dependency resolution
+    • Branch support for cloning
+    • Beautiful progress UI with customizable ASCII art headers
+    • Smart update checking
+    • Automatic cleanup of unused plugins
 
 ==============================================================================
-安装                                                      *synapse-installation*
+INSTALLATION                                              *synapse-installation*
 ==============================================================================
 
 Mac/Linux: ~
+>
     git clone https://github.com/OriginCoderPulse/synapse.nvim \
         ~/.nvim-utils/package/synapse.nvim
+<
 
 Windows: ~
+>
     git clone https://github.com/OriginCoderPulse/synapse.nvim \
         "$env:LOCALAPPDATA\nvim-data\site\pack/packer/start"
+<
 
 ==============================================================================
-配置                                                      *synapse-configuration*
+CONFIGURATION                                            *synapse-configuration*
 ==============================================================================
 
-基本配置: ~
-
+Basic Setup: ~
+>
     require('synapse').setup({
-        methods = "https",  -- 或 "ssh"
-        
+        -- Git clone method: "ssh" or "https"
+        method = "https",
+
         opts = {
+            -- Default plugin (usually synapse itself)
             default = "OriginCoderPulse/synapse.nvim",
-            package_path = os.getenv("HOME") .. "/.super/package",
+            
+            -- Plugin installation directory
+            package_path = os.getenv("HOME") .. "/.synapse/package",
+            
+            -- Configuration directory (scanned recursively for .lua files)
             config_path = os.getenv("HOME") .. "/.config/nvim",
+            
+            -- UI customization
+            ui = {
+                style = "float",
+                header = {
+                    "███████╗██╗   ██╗███╗   ██╗ █████╗ ██████╗ ███████╗███████╗",
+                    "██╔════╝╚██╗ ██╔╝████╗  ██║██╔══██╗██╔══██╗██╔════╝██╔════╝",
+                    "███████╗ ╚████╔╝ ██╔██╗ ██║███████║██████╔╝███████╗█████╗  ",
+                    "╚════██║  ╚██╔╝  ██║╚██╗██║██╔══██║██╔═══╝ ╚════██║██╔══╝  ",
+                    "███████║   ██║   ██║ ╚████║██║  ██║██║     ███████║███████╗",
+                    "╚══════╝   ╚═╝   ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝     ╚══════╝╚══════╝",
+                },
+                hl = "#fbe4d5",
+                icons = {
+                    download = { glyph = "", hl = "SynapseDownload" },
+                    upgrade = { glyph = "󰚰", hl = "SynapseUpgrade" },
+                    remove = { glyph = "󰺝", hl = "SynapseRemove" },
+                    check = { glyph = "󱥾", hl = "SynapseCheck" },
+                    success = { glyph = "󰘫", hl = "SynapseSuccess" },
+                    faild = { glyph = "󰬌", hl = "SynapseFaild" },
+                    progress = {
+                        glyph = "",
+                        hl = {
+                            default = "SynapseProgressDefault",
+                            progress = "SynapseProgress",
+                        },
+                    },
+                },
+            },
         },
         
-        keymaps = {
-            install = "<leader>si",
+        keys = {
+            download = "<leader>si",
             remove = "<leader>sr",
-            update = "<leader>su",
+            upgrade = "<leader>su",
         },
     })
+<
 
 ==============================================================================
-配置文件格式                                              *synapse-config-format*
+PLUGIN CONFIGURATION FORMAT                        *synapse-config-format*
 ==============================================================================
 
-Synapse 会从 `config_path` 目录递归扫描所有 `.lua` 文件，读取插件
-配置。
+Synapse recursively scans all `.lua` files in the `config_path` directory
+to read plugin configurations.
 
-基本格式: ~
-
+Basic Format: ~
+>
     return {
-        repo = "username/repo-name",        -- 必需：插件仓库地址
-        clone_conf = {                      -- 可选：克隆配置
-            branch = "main",                 -- 克隆分支，默认 "main"
+        repo = "username/repo-name",        -- Required: plugin repository
+        clone_conf = {                      -- Optional: clone configuration
+            branch = "main",                 -- Clone branch, default "main"
         },
-        depend = {                          -- 可选：依赖项列表
+        depend = {                          -- Optional: dependency list
             "dependency1/repo1",
             "dependency2/repo2",
         },
-        config = function()                 -- 可选：插件配置函数
-            -- 配置代码
+        config = function()                 -- Optional: plugin config function
+            -- Configuration code
         end,
     }
+<
 
-示例 1 - 基本插件: ~
-
+Example 1 - Basic Plugin: ~
+>
+    -- ~/.config/nvim/plugins/mason.lua
     return {
         repo = "williamboman/mason.nvim",
-        clone_conf = {},
         config = function()
             require("mason").setup({})
         end,
     }
+<
 
-示例 2 - 带依赖项: ~
-
+Example 2 - With Dependencies: ~
+>
+    -- ~/.config/nvim/plugins/telescope.lua
     return {
         repo = "nvim-telescope/telescope.nvim",
-        clone_conf = {},
         depend = {
             "nvim-lua/plenary.nvim",
+            "nvim-telescope/telescope-live-grep-args.nvim",
         },
         config = function()
             require("telescope").setup({})
         end,
     }
+<
 
-示例 3 - 指定分支: ~
-
+Example 3 - Custom Branch: ~
+>
+    -- ~/.config/nvim/plugins/custom.lua
     return {
         repo = "username/repo-name",
         clone_conf = {
             branch = "develop",
         },
         config = function()
-            -- 配置代码
+            -- Your configuration
         end,
     }
+<
 
 ==============================================================================
-使用方法                                                  *synapse-usage*
+USAGE                                                      *synapse-usage*
 ==============================================================================
 
-安装插件: ~
-    默认情况下，Synapse 会在 Neovim 启动时自动安装缺失的插件。
-    
-    手动安装：
-    - 快捷键：<leader>si
-    - 命令：:SynapseDownload
+Commands: ~
+    :SynapseDownload    Install missing plugins
+    :SynapseUpgrade     Update all plugins
+    :SynapseRemove      Remove unused plugins
 
-更新插件: ~
-    - 快捷键：<leader>su
-    - 命令：:SynapseUpgrade
-
-移除插件: ~
-    移除所有不在配置文件中定义的插件：
-    - 快捷键：<leader>sr
-    - 命令：:SynapseRemove
+Keymaps (default): ~
+    <leader>si          Install plugins
+    <leader>sr          Remove unused plugins
+    <leader>su          Update plugins
 
 ==============================================================================
-依赖项管理                                              *synapse-dependencies*
+UI FEATURES                                                  *synapse-ui*
 ==============================================================================
 
-Synapse 会自动处理插件的依赖项：
+Example: ~
+    See gif/Example.gif for a visual demonstration of the UI in action.
 
-1. 自动安装：安装主插件时，会自动安装其所有依赖项
-2. 去重处理：多个插件共享同一依赖项时，只会安装一次
-3. 自动更新：更新时会同时更新主插件和依赖项
-4. 智能保护：移除插件时，依赖项会被保护
+Progress Window: ~
+    • Header: Customizable multi-line ASCII art (centered)
+    • Plugin List: Shows up to 10 plugins at a time with dynamic scrolling
+    • Progress Bar: Visual progress indicator with customizable colors
+    • Status Icons: Different icons for pending, active, success, and failed
+      states
 
-依赖项优先级: ~
-    如果依赖项本身也是主插件（在配置文件中定义），会使用主插件的配置；
-    否则使用默认配置（branch: "main"）。
+Window Controls: ~
+    q or <Esc>          Close window
+    Shift+R             Retry failed operations (when viewing failures)
 
-==============================================================================
-配置选项                                                  *synapse-options*
-==============================================================================
-
-methods                                    *synapse-options-methods*
-    类型：String
-    默认值："https"
-    可选值："ssh" 或 "https"
-    说明：Git 克隆协议
-
-opts.default                                *synapse-options-default*
-    类型：String
-    默认值："OriginCoderPulse/synapse.nvim"
-    说明：默认插件仓库地址
-
-opts.package_path                           *synapse-options-package-path*
-    类型：String
-    默认值：~/.super/package
-    说明：插件安装路径
-
-opts.config_path                            *synapse-options-config-path*
-    类型：String
-    默认值：~/.config/nvim
-    说明：配置文件目录，会递归扫描所有 .lua 文件
-
-keymaps                                    *synapse-options-keymaps*
-    类型：Table
-    说明：快捷键映射
-    - install：安装插件（默认：<leader>si）
-    - remove：移除插件（默认：<leader>sr）
-    - update：更新插件（默认：<leader>su）
-
-配置文件字段: ~
-
-repo                                       *synapse-config-repo*
-    类型：String（必需）
-    格式："username/repo-name" 或完整 URL
-    说明：插件仓库地址
-
-clone_conf                                 *synapse-config-clone-conf*
-    类型：Table（可选）
-    说明：克隆配置
-    - branch：克隆分支，默认为 "main"
-
-depend                                     *synapse-config-depend*
-    类型：Array of Strings（可选）
-    说明：依赖项列表，格式为 "username/repo-name"
-
-config                                     *synapse-config-config*
-    类型：Function（可选）
-    说明：插件配置函数
+The UI automatically:
+    • Removes completed/failed plugins from the list
+    • Adds new plugins from the queue to maintain 10 visible items
+    • Closes automatically on completion with a summary notification
+    • Shows progress bar with default and progress colors
 
 ==============================================================================
-常见问题                                                  *synapse-faq*
+DEPENDENCY MANAGEMENT                              *synapse-dependencies*
 ==============================================================================
 
-Q: 插件没有被识别？ ~
-A: 检查：
-   1. 配置文件在 config_path 目录下（支持子目录）
-   2. 配置文件返回包含 repo 字段的表
-   3. repo 字段不为空
+Synapse automatically handles plugin dependencies:
 
-Q: 依赖项没有被安装？ ~
-A: 检查：
-   1. depend 字段格式是否正确（字符串数组）
-   2. 依赖项仓库地址是否正确
-   3. 网络连接是否正常
+1. Auto-install: Dependencies are installed automatically when installing
+   main plugins
+2. Deduplication: Shared dependencies are installed only once
+3. Priority: If a dependency is also a main plugin, its configuration
+   takes precedence
+4. Protection: Dependencies are protected during removal unless unused
 
-Q: 权限问题？ ~
-A: 确保 Neovim 有权限在 package_path 目录下创建、修改和删除文件。
-
-Q: 网络问题？ ~
-A: 检查网络连接和 GitHub 访问，如果使用 SSH 方式，检查 SSH 密钥配置。
+Dependency Priority: ~
+    If a dependency is also defined as a main plugin in configuration files,
+    the main plugin's configuration is used; otherwise, default configuration
+    (branch: "main") is applied.
 
 ==============================================================================
- vim:tw=78:ts=8:ft=help:norl:
+CONFIGURATION OPTIONS                                  *synapse-options*
+==============================================================================
+
+method                                                  *synapse-options-method*
+    Type: String
+    Default: "https"
+    Values: "ssh" or "https"
+    Description: Git clone protocol
+
+opts.default                                    *synapse-options-opts-default*
+    Type: String
+    Default: "OriginCoderPulse/synapse.nvim"
+    Description: Default plugin repository
+
+opts.package_path                        *synapse-options-opts-package-path*
+    Type: String
+    Default: ~/.synapse/package
+    Description: Directory where plugins are installed
+
+opts.config_path                          *synapse-options-opts-config-path*
+    Type: String
+    Default: ~/.config/nvim
+    Description: Directory to scan for plugin configuration files
+    (recursive scan)
+
+opts.ui                                          *synapse-options-opts-ui*
+    Type: Table
+    Description: UI customization options
+    • header: Multi-line ASCII art or string
+    • hl: Icon highlight color or highlight group name
+    • icons: Icon definitions with `glyph` and `hl` fields
+
+keys                                                  *synapse-options-keys*
+    Type: Table
+    Description: Keymap configuration
+    • download: Install plugin keymap (default: <leader>si)
+    • remove: Remove plugin keymap (default: <leader>sr)
+    • update: Update plugin keymap (default: <leader>su)
+
+Plugin Configuration Fields: ~
+
+repo                                              *synapse-config-field-repo*
+    Type: String (required)
+    Format: "username/repo-name" or full URL
+    Description: Plugin repository address
+
+clone_conf                                  *synapse-config-field-clone-conf*
+    Type: Table (optional)
+    Description: Clone configuration
+    • branch: Clone branch, default "main"
+
+depend                                          *synapse-config-field-depend*
+    Type: Array of Strings (optional)
+    Description: Dependency list, format: "username/repo-name"
+
+config                                          *synapse-config-field-config*
+    Type: Function (optional)
+    Description: Plugin configuration function
+
+==============================================================================
+ARCHITECTURE                                          *synapse-architecture*
+==============================================================================
+
+The project follows a modular architecture:
+
+>
+    lua/synapse/
+    ├── init.lua          # Main entry point
+    ├── config.lua        # Configuration management
+    ├── commands.lua     # User commands and keymaps
+    ├── core/            # Core functionality
+    │   ├── install.lua  # Installation logic
+    │   ├── remove.lua   # Removal logic
+    │   └── update.lua   # Update logic
+    ├── ui/              # UI components
+    │   ├── init.lua     # UI main interface
+    │   ├── state.lua    # State management
+    │   ├── window.lua   # Window management
+    │   ├── renderer.lua # Rendering logic
+    │   └── highlights.lua # Highlight groups
+    └── utils/           # Utility functions
+        ├── string.lua   # String utilities
+        ├── git.lua      # Git operations
+        └── config.lua   # Config file loading
+<
+
+==============================================================================
+TROUBLESHOOTING                                  *synapse-troubleshooting*
+==============================================================================
+
+Q: Plugins not recognized? ~
+A: Check:
+   1. Configuration files are in config_path (supports subdirectories)
+   2. Files return a table with a repo field
+   3. repo field is not empty
+
+Q: Dependencies not installed? ~
+A: Check:
+   1. depend field format is correct (array of strings)
+   2. Dependency repository URLs are correct
+   3. Network connectivity is normal
+
+Q: Permission issues? ~
+A: Ensure Neovim has write permissions in package_path directory.
+
+Q: Network issues? ~
+A: Check:
+   1. Internet connectivity
+   2. GitHub accessibility
+   3. SSH key configuration (if using SSH method)
+
+==============================================================================
+ vim:tw=78:ts=8:ft=help:norl:noet:

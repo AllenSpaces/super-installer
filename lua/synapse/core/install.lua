@@ -1,5 +1,7 @@
-local ui = require("synapse.model.ui")
-local utils = require("synapse.model.utils")
+local ui = require("synapse.ui")
+local git_utils = require("synapse.utils.git")
+local config_utils = require("synapse.utils.config")
+local string_utils = require("synapse.utils.string")
 
 local M = {}
 
@@ -9,7 +11,7 @@ function M.start(config)
 	installation_active = true
 
 	-- 从 config_path 读取配置文件
-	local configs = utils.load_config_files(config.opts.config_path)
+	local configs = config_utils.load_config_files(config.opts.config_path)
 	
 	-- 添加默认插件
 	local default_config = {
@@ -99,56 +101,117 @@ function M.start(config)
 		return
 	end
 
-	local total = #pending_install
-	local errors = {}
-	local installed_count = 0
-	local completed = 0
-	local progress_win = ui.create_window(config.opts.ui.icons.download .. " Plugin Installation Progress", 68)
-
-	vim.api.nvim_create_autocmd("WinClosed", {
-		buffer = progress_win.buf,
-		callback = function()
-			installation_active = false
-		end,
-	})
-
-	local function process_next(index)
-		if not installation_active then
+	local function run_install_queue(queue)
+		if not queue or #queue == 0 then
 			return
 		end
 
-		if index > total then
-			ui.update_progress(
-				progress_win,
-				config.opts.ui.icons.download .. " Finalizing installation...",
-				total,
-				total,
-				config.opts.ui
-			)
-			vim.defer_fn(function()
-				vim.api.nvim_win_close(progress_win.win_id, true)
-				ui.show_report(errors, installed_count, total, "installation")
-			end, 500)
-			return
+		installation_active = true
+
+		local plugin_names = {}
+		for _, cfg in ipairs(queue) do
+			table.insert(plugin_names, string_utils.get_plugin_name(cfg.repo))
 		end
 
-		local plugin_config = pending_install[index]
-		local plugin_name = plugin_config.repo:match("([^/]+)$")
-		plugin_name = plugin_name:gsub("%.git$", "")
-		ui.update_progress(progress_win, "Installing: " .. plugin_name, completed, total, config.opts.ui)
+		local progress_win = ui.open({
+			header = config.opts.ui.header,
+			icon = config.opts.ui.icons.download,
+			plugins = plugin_names,
+			ui = config.opts.ui,
+		})
 
-		M.install_plugin(plugin_config, config.method, config.opts.package_path, function(success, err)
-			completed = completed + 1
-			if success then
-				installed_count = installed_count + 1
-			else
-				table.insert(errors, { plugin = plugin_name, error = err })
+		vim.api.nvim_create_autocmd("WinClosed", {
+			buffer = progress_win.buf,
+			callback = function()
+				installation_active = false
+			end,
+		})
+
+		local total = #queue
+		local errors = {}
+		local failed_list = {}
+		local installed_count = 0
+		local completed = 0
+
+		local function finalize()
+			if not installation_active then
+				return
 			end
-			process_next(index + 1)
-		end)
+
+			if #errors > 0 then
+				-- Show failed plugins and allow retry
+				ui.show_report(errors, installed_count, total, {
+					ui = config.opts.ui,
+					failed_plugins = failed_list,
+					on_retry = function()
+						-- Retry failed plugins
+						local retry_queue = {}
+						for _, err in ipairs(errors) do
+							for _, cfg in ipairs(queue) do
+								local plugin_name = string_utils.get_plugin_name(cfg.repo)
+								if plugin_name == err.plugin then
+									table.insert(retry_queue, cfg)
+									break
+								end
+							end
+						end
+						if #retry_queue > 0 then
+							run_install_queue(retry_queue)
+						end
+					end,
+				})
+			else
+				local summary = string.format(
+					"%s %d/%d %s",
+					config.opts.ui.icons.download.glyph or config.opts.ui.icons.download,
+					installed_count,
+					total,
+					"done"
+				)
+				ui.close({ message = summary, level = vim.log.levels.INFO })
+			end
+		end
+
+		local function process_next(index)
+			if not installation_active then
+				return
+			end
+
+			if index > total then
+				finalize()
+				return
+			end
+
+			local plugin_config = queue[index]
+			local plugin_name = string_utils.get_plugin_name(plugin_config.repo)
+
+			ui.update_progress(progress_win, { plugin = plugin_name, status = "active" }, completed, total, config.opts.ui)
+
+			M.install_plugin(plugin_config, config.method, config.opts.package_path, function(success, err)
+				completed = completed + 1
+				if success then
+					installed_count = installed_count + 1
+				else
+					table.insert(errors, { plugin = plugin_name, error = err })
+					table.insert(failed_list, plugin_name)
+				end
+
+				ui.update_progress(
+					progress_win,
+					{ plugin = plugin_name, status = success and "done" or "failed" },
+					completed,
+					total,
+					config.opts.ui
+				)
+
+				process_next(index + 1)
+			end)
+		end
+
+		process_next(1)
 	end
 
-	process_next(1)
+	run_install_queue(pending_install)
 end
 
 function M.install_plugin(plugin_config, git_config, package_path, callback)
@@ -159,10 +222,9 @@ function M.install_plugin(plugin_config, git_config, package_path, callback)
 	local repo = plugin_config.repo
 	local branch = plugin_config.branch or "main"
 	
-	local repo_url = utils.get_repo_url(repo, git_config)
-	local plugin_name = repo:match("([^/]+)$")
-	plugin_name = plugin_name:gsub("%.git$", "")
-	local target_dir = utils.get_install_dir(plugin_name, "start", package_path)
+	local repo_url = git_utils.get_repo_url(repo, git_config)
+	local plugin_name = string_utils.get_plugin_name(repo)
+	local target_dir = git_utils.get_install_dir(plugin_name, "start", package_path)
 
 	local command
 	if vim.fn.isdirectory(target_dir) == 1 then
@@ -178,7 +240,7 @@ function M.install_plugin(plugin_config, git_config, package_path, callback)
 		end
 	end
 
-	utils.execute_command(command, callback)
+	git_utils.execute_command(command, callback)
 end
 
 return M
