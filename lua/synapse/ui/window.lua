@@ -19,8 +19,8 @@ end
 --- @param buf number
 function M.ensure_keymaps(buf)
 	local opts = { noremap = true, silent = true }
-	api.nvim_buf_set_keymap(buf, "n", "q", "<cmd>q!<CR>", opts)
-	api.nvim_buf_set_keymap(buf, "n", "<Esc>", "<cmd>q!<CR>", opts)
+	api.nvim_buf_set_keymap(buf, "n", "q", "<cmd>lua require('synapse.ui').close()<CR>", opts)
+	api.nvim_buf_set_keymap(buf, "n", "<Esc>", "<cmd>lua require('synapse.ui').close()<CR>", opts)
 	api.nvim_buf_set_keymap(buf, "n", "R", "<cmd>lua require('synapse.ui').retry_failures()<CR>", opts)
 end
 
@@ -71,10 +71,19 @@ end
 
 --- Close window
 function M.close()
-	if M.win_cache and M.win_cache.win_id and api.nvim_win_is_valid(M.win_cache.win_id) then
-		pcall(api.nvim_win_close, M.win_cache.win_id, true)
+	if M.win_cache then
+		-- Close window if valid
+		if M.win_cache.win_id and api.nvim_win_is_valid(M.win_cache.win_id) then
+			pcall(api.nvim_win_close, M.win_cache.win_id, true)
+		end
+		
+		-- Delete buffer if valid
+		if M.win_cache.buf and api.nvim_buf_is_valid(M.win_cache.buf) then
+			pcall(api.nvim_buf_delete, M.win_cache.buf, { force = true })
+		end
+		
+		M.win_cache = nil
 	end
-	M.win_cache = nil
 end
 
 return M

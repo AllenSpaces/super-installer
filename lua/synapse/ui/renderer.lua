@@ -138,9 +138,9 @@ function M.render_progress(win, ui)
 	-- Instructions
 	local instructions
 	if state.state.show_failures then
-		instructions = "Press : 󰫾 | 󰫲󱎤󰫰 Quit · 󰫿 Retry"
+		instructions = "Press 󰫿 to Retry | Press 󰫾 or 󰫲󱎤󰫰 to Quit"
 	else
-		instructions = "Press : 󰫾 | 󰫲󱎤󰫰 Quit"
+		instructions = "Press 󰫾 or 󰫲󱎤󰫰 to Quit"
 	end
 	push_line(line_specs, content_width, instructions, { align = "center" })
 

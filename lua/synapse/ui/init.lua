@@ -172,6 +172,12 @@ function M.retry_failures()
 			entry.icon_hl = nil
 		end
 		
+		-- Re-render UI to show progress bar after retry
+		local win = window.win_cache
+		if win then
+			renderer.render_progress(win, state.state.ui)
+		end
+		
 		local cb = state.state.retry_cb
 		state.state.retry_cb = nil
 		cb()

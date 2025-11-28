@@ -15,16 +15,8 @@ A modern, lightweight plugin manager for Neovim with a beautiful UI and intellig
 
 ## Installation
 
-### Mac/Linux
-
 ```bash
-git clone https://github.com/OriginCoderPulse/synapse.nvim ~/.nvim-utils/package/synapse.nvim
-```
-
-### Windows
-
-```bash
-git clone https://github.com/OriginCoderPulse/synapse.nvim "$env:LOCALAPPDATA\nvim-data\site\pack/packer/start"
+git clone https://github.com/OriginCoderPulse/synapse.nvim ~/.local/site/package/pack/synapse.nvim
 ```
 
 ## Quick Start
@@ -32,21 +24,7 @@ git clone https://github.com/OriginCoderPulse/synapse.nvim "$env:LOCALAPPDATA\nv
 Add to your Neovim configuration:
 
 ```lua
-require('synapse').setup({
-    method = "https",  -- or "ssh"
-
-    opts = {
-        default = "OriginCoderPulse/synapse.nvim",
-        package_path = os.getenv("HOME") .. "/.synapse/package",
-        config_path = os.getenv("HOME") .. "/.config/nvim",
-    },
-
-    keys = {
-        download = "<leader>si",
-        remove = "<leader>sr",
-        upgrade = "<leader>su",
-    },
-})
+require('synapse').setup({})
 ```
 
 ## Configuration
@@ -59,14 +37,11 @@ require('synapse').setup({
     method = "https",
 
     opts = {
-        -- Default plugin (usually synapse itself)
-        default = "OriginCoderPulse/synapse.nvim",
-        
         -- Plugin installation directory
-        package_path = os.getenv("HOME") .. "/.synapse/package",
+        package_path = "your pkg path",
         
         -- Configuration directory (scanned recursively for .lua files)
-        config_path = os.getenv("HOME") .. "/.config/nvim",
+        config_path = "your config path",
         
         -- UI customization
         ui = {
