@@ -111,14 +111,7 @@ function M.start(config)
 					end,
 				})
 			else
-				local summary = string.format(
-					"%s %d/%d %s",
-					config.opts.ui.icons.remove.glyph or config.opts.ui.icons.remove,
-					removed_count,
-					total,
-					"done"
-				)
-				vim.notify(summary, vim.log.levels.INFO, { title = "Synapse" })
+				vim.notify("Remove Success", vim.log.levels.INFO, { title = "Synapse" })
 			end
 		end
 

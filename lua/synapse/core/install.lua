@@ -161,14 +161,7 @@ function M.start(config)
 					end,
 				})
 			else
-				local summary = string.format(
-					"%s %d/%d %s",
-					config.opts.ui.icons.download.glyph or config.opts.ui.icons.download,
-					installed_count,
-					total,
-					"done"
-				)
-				ui.close({ message = summary, level = vim.log.levels.INFO })
+				ui.close({ message = "Download Success", level = vim.log.levels.INFO })
 			end
 		end
 

@@ -147,16 +147,7 @@ function M.start(config)
 					end,
 				})
 			else
-				local icon_cfg = aggregate.total > 0 and config.opts.ui.icons.update or config.opts.ui.icons.check
-				local icon = format_icon(icon_cfg)
-				local count_str
-				if aggregate.total > 0 then
-					count_str = string.format("%d/%d", aggregate.success, aggregate.total)
-				else
-					count_str = string.format("%d/%d", aggregate.check_success, aggregate.checks)
-				end
-				local summary = string.format("%s %s done", icon, count_str)
-				ui.close({ message = summary, level = vim.log.levels.INFO })
+				ui.close({ message = "Upgrade Success", level = vim.log.levels.INFO })
 			end
 		end
 
