@@ -153,30 +153,6 @@ return {
 
 - `q` or `Esc` - Close window
 - `R` - Retry failed operations (when viewing failures)
-
-## Architecture
-
-The project follows a modular architecture:
-
-```
-lua/synapse/
-├── init.lua          # Main entry point
-├── config.lua        # Configuration management
-├── commands.lua      # User commands and keymaps
-├── core/             # Core functionality
-│   ├── install.lua   # Installation logic
-│   ├── remove.lua    # Removal logic
-│   └── update.lua    # Update logic
-├── ui/               # UI components
-│   ├── init.lua      # UI main interface
-│   ├── state.lua     # State management
-│   ├── window.lua    # Window management
-│   ├── renderer.lua  # Rendering logic
-│   └── highlights.lua # Highlight groups
-└── utils/            # Utility functions
-    ├── string.lua    # String utilities
-    ├── git.lua       # Git operations
-    └── config.lua    # Config file loading
 ```
 
 ## Configuration Options
@@ -260,6 +236,12 @@ Synapse supports both branch and tag-based version control:
   - Records installed plugins with their repository, branch, tag, and dependencies
   - Only main plugins are recorded (dependencies are stored in `depend` field)
   - Used to maintain consistency across installations and updates
+
+- **Post-Install Commands**: Use `execute` field to run build commands
+  - Commands are executed after successful Git clone/update
+  - Supports both installation and update operations
+  - Commands run in the plugin's installation directory
+  - Useful for compiled plugins that require build steps
 
 ## Examples
 
@@ -351,6 +333,34 @@ return {
 
 **Note**: The `execute` field supports both a single string or an array of strings. Commands are executed sequentially in the plugin's installation directory. If any command fails, the installation/update process will stop and report an error.
 
+**Common Use Cases**:
+- **Compiled plugins**: Use `make`, `cargo build`, `npm install`, etc.
+- **Language servers**: Build and install language servers
+- **Native extensions**: Compile native components
+- **Post-install setup**: Run setup scripts or install dependencies
+
+**Examples**:
+```lua
+-- C/C++ plugin with make
+execute = "make"
+
+-- Rust plugin with cargo
+execute = "cargo build --release"
+
+-- Node.js plugin
+execute = "npm install"
+
+-- Multiple build steps
+execute = {
+    "cmake .",
+    "make",
+    "make install",
+}
+
+-- Python plugin with pip
+execute = "pip install -e ."
+```
+
 ### Custom UI Colors
 
 You can use hex colors directly in `hl` parameters:
@@ -428,6 +438,15 @@ require('synapse').setup({
 - Verify internet connectivity
 - Check GitHub accessibility
 - Verify SSH keys (if using SSH method)
+
+### Execute Commands Fail
+
+- Ensure the required build tools are installed (make, cargo, npm, etc.)
+- Check that the plugin directory contains the necessary build files
+- Verify the command syntax is correct
+- Check file permissions in the plugin directory
+- Review error messages in the UI for specific command failures
+- Some commands may require additional environment variables or PATH settings
 
 ## Contributing
 
