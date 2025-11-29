@@ -1,6 +1,8 @@
 local ui = require("synapse.ui")
 local git_utils = require("synapse.utils.git")
 local config_utils = require("synapse.utils.config")
+local yaml_utils = require("synapse.utils.yaml")
+local string_utils = require("synapse.utils.string")
 
 local M = {}
 
@@ -159,6 +161,78 @@ function M.start(config)
 	run_removal_queue(removal_candidates)
 end
 
+--- Check if a dependency is referenced by other plugins
+--- @param dep_name string
+--- @param package_path string
+--- @param exclude_plugin string|nil Plugin name to exclude from check
+--- @return boolean
+local function is_dependency_referenced(dep_name, package_path, exclude_plugin)
+	local yaml_path = yaml_utils.get_yaml_path(package_path)
+	local data, _ = yaml_utils.read(yaml_path)
+	
+	if not data or not data.plugins then
+		return false
+	end
+	
+	-- Check all plugins except the one being removed
+	for _, plugin in ipairs(data.plugins) do
+		if plugin.name ~= exclude_plugin and plugin.depend then
+			for _, dep in ipairs(plugin.depend) do
+				local dep_plugin_name = string_utils.get_plugin_name(dep)
+				if dep_plugin_name == dep_name then
+					return true
+				end
+			end
+		end
+	end
+	
+	return false
+end
+
+--- Remove plugin from synapse.yaml
+--- @param package_path string
+--- @param plugin_name string
+local function remove_from_yaml(package_path, plugin_name)
+	local yaml_path = yaml_utils.get_yaml_path(package_path)
+	local data, _ = yaml_utils.read(yaml_path)
+	
+	if not data or not data.plugins then
+		return
+	end
+	
+	-- Remove plugin from list
+	for i, plugin in ipairs(data.plugins) do
+		if plugin.name == plugin_name then
+			table.remove(data.plugins, i)
+			break
+		end
+	end
+	
+	-- Write back to file
+	yaml_utils.write(yaml_path, data)
+end
+
+--- Get dependencies of a plugin from synapse.yaml
+--- @param package_path string
+--- @param plugin_name string
+--- @return table|nil
+local function get_plugin_dependencies(package_path, plugin_name)
+	local yaml_path = yaml_utils.get_yaml_path(package_path)
+	local data, _ = yaml_utils.read(yaml_path)
+	
+	if not data or not data.plugins then
+		return nil
+	end
+	
+	for _, plugin in ipairs(data.plugins) do
+		if plugin.name == plugin_name then
+			return plugin.depend or {}
+		end
+	end
+	
+	return nil
+end
+
 function M.remove_plugin(plugin_name, package_path, callback)
 	local install_path = git_utils.get_install_dir(plugin_name, "start", package_path)
 
@@ -167,9 +241,33 @@ function M.remove_plugin(plugin_name, package_path, callback)
 		return
 	end
 
+	-- Get dependencies from synapse.yaml
+	local dependencies = get_plugin_dependencies(package_path, plugin_name)
+	
+	-- Remove the plugin
 	local cmd = string.format("rm -rf %s", vim.fn.shellescape(install_path))
 	git_utils.execute_command(cmd, function(success, err)
 		if success then
+			-- Remove from synapse.yaml
+			remove_from_yaml(package_path, plugin_name)
+			
+			-- Check and remove unreferenced dependencies
+			if dependencies and #dependencies > 0 then
+				for _, dep_repo in ipairs(dependencies) do
+					local dep_name = string_utils.get_plugin_name(dep_repo)
+					-- Check if dependency is referenced by other plugins
+					if not is_dependency_referenced(dep_name, package_path, plugin_name) then
+						-- Remove unreferenced dependency
+						local dep_path = git_utils.get_install_dir(dep_name, "start", package_path)
+						if vim.fn.isdirectory(dep_path) == 1 then
+							local dep_cmd = string.format("rm -rf %s", vim.fn.shellescape(dep_path))
+							git_utils.execute_command(dep_cmd, function() end)
+							remove_from_yaml(package_path, dep_name)
+						end
+					end
+				end
+			end
+			
 			vim.schedule(function()
 				vim.cmd("redrawtabline")
 				vim.cmd("redrawstatus")

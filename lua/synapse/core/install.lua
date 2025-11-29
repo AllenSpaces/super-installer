@@ -2,13 +2,32 @@ local ui = require("synapse.ui")
 local git_utils = require("synapse.utils.git")
 local config_utils = require("synapse.utils.config")
 local string_utils = require("synapse.utils.string")
+local yaml_utils = require("synapse.utils.yaml")
 
 local M = {}
 
 local installation_active = true
 
+--- Ensure synapse.yaml exists, create empty file if it doesn't
+--- @param config table
+local function ensure_yaml_exists(config)
+	local yaml_path = yaml_utils.get_yaml_path(config.opts.package_path)
+	
+	-- Check if synapse.yaml already exists
+	if vim.fn.filereadable(yaml_path) == 1 then
+		return
+	end
+	
+	-- Create empty YAML file
+	local yaml_data = { plugins = {} }
+	yaml_utils.write(yaml_path, yaml_data)
+end
+
 function M.start(config)
 	installation_active = true
+
+	-- Check and create synapse.yaml if it doesn't exist
+	ensure_yaml_exists(config)
 
 	-- 从 config_path 读取配置文件
 	local configs = config_utils.load_config_files(config.opts.config_path)
@@ -86,6 +105,14 @@ function M.start(config)
 		end
 	end
 	
+	-- 建立主插件集合（通过 repo 路径）
+	local main_plugin_repos = {}
+	for _, plugin_config in ipairs(configs) do
+		if plugin_config.repo then
+			main_plugin_repos[plugin_config.repo] = true
+		end
+	end
+	
 	-- 转换为列表并过滤已安装的插件
 	local pending_install = {}
 	for repo, plugin_config in pairs(all_plugins) do
@@ -156,6 +183,7 @@ function M.start(config)
 							end
 						end
 						if #retry_queue > 0 then
+							-- Retry with the same main_plugin_repos context
 							run_install_queue(retry_queue)
 						end
 					end,
@@ -177,10 +205,12 @@ function M.start(config)
 
 			local plugin_config = queue[index]
 			local plugin_name = string_utils.get_plugin_name(plugin_config.repo)
+			-- Check if this is a main plugin
+			local is_main_plugin = main_plugin_repos[plugin_config.repo] == true
 
 			ui.update_progress(progress_win, { plugin = plugin_name, status = "active" }, completed, total, config.opts.ui)
 
-			M.install_plugin(plugin_config, config.method, config.opts.package_path, function(success, err)
+			M.install_plugin(plugin_config, config.method, config.opts.package_path, is_main_plugin, function(success, err)
 				completed = completed + 1
 				if success then
 					installed_count = installed_count + 1
@@ -207,33 +237,191 @@ function M.start(config)
 	run_install_queue(pending_install)
 end
 
-function M.install_plugin(plugin_config, git_config, package_path, callback)
+--- Get plugin branch from synapse.yaml
+--- @param package_path string
+--- @param plugin_name string
+--- @return string|nil branch
+local function get_branch_from_yaml(package_path, plugin_name)
+	local yaml_path = yaml_utils.get_yaml_path(package_path)
+	local data, _ = yaml_utils.read(yaml_path)
+	
+	if data and data.plugins then
+		for _, plugin in ipairs(data.plugins) do
+			if plugin.name == plugin_name then
+				return plugin.branch
+			end
+		end
+	end
+	
+	return nil
+end
+
+--- Update synapse.yaml with plugin information (only for main plugins)
+--- @param package_path string
+--- @param plugin_name string
+--- @param plugin_config table
+--- @param actual_branch string|nil The actual branch used for installation
+--- @param is_main_plugin boolean Whether this is a main plugin
+local function update_yaml(package_path, plugin_name, plugin_config, actual_branch, is_main_plugin)
+	-- Only save main plugins, skip dependencies
+	if not is_main_plugin then
+		return
+	end
+	
+	local yaml_path = yaml_utils.get_yaml_path(package_path)
+	
+	-- Read existing YAML or create new
+	local data, err = yaml_utils.read(yaml_path)
+	if not data then
+		data = { plugins = {} }
+	end
+	
+	-- Keep depend repos as full repo paths (e.g., "nvim-lua/plenary.nvim")
+	local depend_repos = {}
+	if plugin_config.depend and type(plugin_config.depend) == "table" then
+		for _, dep_repo in ipairs(plugin_config.depend) do
+			table.insert(depend_repos, dep_repo)
+		end
+	end
+	
+	-- Collect all repos that appear in any plugin's depend field
+	local all_depend_repos = {}
+	for _, plugin in ipairs(data.plugins) do
+		if plugin.depend and type(plugin.depend) == "table" then
+			for _, dep_repo in ipairs(plugin.depend) do
+				all_depend_repos[dep_repo] = true
+			end
+		end
+	end
+	
+	-- Also add current plugin's depend repos to the set
+	for _, dep_repo in ipairs(depend_repos) do
+		all_depend_repos[dep_repo] = true
+	end
+	
+	-- Check if current plugin's repo is in any depend field
+	local current_repo = plugin_config.repo
+	local is_in_depend = all_depend_repos[current_repo] == true
+	
+	-- If this repo is in any depend field, don't save it as a main plugin
+	if is_in_depend then
+		return
+	end
+	
+	-- Check if plugin already exists
+	local found = false
+	local found_index = nil
+	for i, plugin in ipairs(data.plugins) do
+		if plugin.name == plugin_name then
+			found = true
+			found_index = i
+			break
+		end
+	end
+	
+	if found then
+		-- Check if this plugin's repo is in any other plugin's depend field
+		local is_in_other_depend = false
+		for _, plugin in ipairs(data.plugins) do
+			if plugin.name ~= plugin_name and plugin.depend and type(plugin.depend) == "table" then
+				for _, dep_repo in ipairs(plugin.depend) do
+					if dep_repo == current_repo then
+						is_in_other_depend = true
+						break
+					end
+				end
+				if is_in_other_depend then
+					break
+				end
+			end
+		end
+		
+		-- If this plugin is in another plugin's depend, remove it from plugins list
+		if is_in_other_depend then
+			table.remove(data.plugins, found_index)
+			-- Write back and return
+			yaml_utils.write(yaml_path, data)
+			return
+		end
+		
+		-- Update existing entry
+		-- Use actual_branch if provided, otherwise use plugin_config.branch
+		local branch = actual_branch or plugin_config.branch
+		if branch and branch ~= "main" and branch ~= "master" then
+			data.plugins[found_index].branch = branch
+		else
+			-- Remove branch field if it's default
+			data.plugins[found_index].branch = nil
+		end
+		data.plugins[found_index].repo = current_repo
+		data.plugins[found_index].depend = depend_repos
+	end
+	
+	-- Add new plugin if not found
+	if not found then
+		local plugin_entry = {
+			name = plugin_name,
+			repo = current_repo,
+			depend = depend_repos,
+		}
+		-- Use actual_branch if provided, otherwise use plugin_config.branch
+		local branch = actual_branch or plugin_config.branch
+		if branch and branch ~= "main" and branch ~= "master" then
+			plugin_entry.branch = branch
+		end
+		table.insert(data.plugins, plugin_entry)
+	end
+	
+	-- Write back to file
+	yaml_utils.write(yaml_path, data)
+end
+
+function M.install_plugin(plugin_config, git_config, package_path, is_main_plugin, callback)
 	if not installation_active then
 		return
 	end
 
 	local repo = plugin_config.repo
-	local branch = plugin_config.branch or "main"
-	
-	local repo_url = git_utils.get_repo_url(repo, git_config)
 	local plugin_name = string_utils.get_plugin_name(repo)
 	local target_dir = git_utils.get_install_dir(plugin_name, "start", package_path)
+	
+	-- Determine branch: if plugin already exists, try to get branch from synapse.yaml first
+	local branch = plugin_config.branch or "main"
+	if vim.fn.isdirectory(target_dir) == 1 then
+		-- Plugin already exists, try to get branch from synapse.yaml
+		local yaml_branch = get_branch_from_yaml(package_path, plugin_name)
+		if yaml_branch then
+			branch = yaml_branch
+		end
+	else
+		-- New plugin, use branch from config
+		branch = plugin_config.branch or "main"
+	end
+	
+	local repo_url = git_utils.get_repo_url(repo, git_config)
 
 	local command
 	if vim.fn.isdirectory(target_dir) == 1 then
 		-- 如果目录已存在，更新到指定分支
 		command = string.format("cd %s && git fetch origin && git checkout %s && git pull origin %s", 
-			target_dir, branch, branch)
+			vim.fn.shellescape(target_dir), branch, branch)
 	else
 		-- 克隆指定分支
 		if branch == "main" or branch == "master" then
-			command = string.format("git clone --depth 1 %s %s", repo_url, target_dir)
+			command = string.format("git clone --depth 1 %s %s", repo_url, vim.fn.shellescape(target_dir))
 		else
-			command = string.format("git clone --depth 1 -b %s %s %s", branch, repo_url, target_dir)
+			command = string.format("git clone --depth 1 -b %s %s %s", branch, repo_url, vim.fn.shellescape(target_dir))
 		end
 	end
 
-	git_utils.execute_command(command, callback)
+	git_utils.execute_command(command, function(success, err)
+		if success then
+			-- Update synapse.yaml on successful installation (only for main plugins)
+			-- Pass the actual branch used for installation
+			update_yaml(package_path, plugin_name, plugin_config, branch, is_main_plugin)
+		end
+		callback(success, err)
+	end)
 end
 
 return M
