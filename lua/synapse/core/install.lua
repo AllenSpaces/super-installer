@@ -237,23 +237,24 @@ function M.start(config)
 	run_install_queue(pending_install)
 end
 
---- Get plugin branch from synapse.yaml
+--- Get plugin branch and tag from synapse.yaml
 --- @param package_path string
 --- @param plugin_name string
 --- @return string|nil branch
-local function get_branch_from_yaml(package_path, plugin_name)
+--- @return string|nil tag
+local function get_branch_tag_from_yaml(package_path, plugin_name)
 	local yaml_path = yaml_utils.get_yaml_path(package_path)
 	local data, _ = yaml_utils.read(yaml_path)
 	
 	if data and data.plugins then
 		for _, plugin in ipairs(data.plugins) do
 			if plugin.name == plugin_name then
-				return plugin.branch
+				return plugin.branch, plugin.tag
 			end
 		end
 	end
 	
-	return nil
+	return nil, nil
 end
 
 --- Update synapse.yaml with plugin information (only for main plugins)
@@ -261,8 +262,9 @@ end
 --- @param plugin_name string
 --- @param plugin_config table
 --- @param actual_branch string|nil The actual branch used for installation
+--- @param actual_tag string|nil The actual tag used for installation
 --- @param is_main_plugin boolean Whether this is a main plugin
-local function update_yaml(package_path, plugin_name, plugin_config, actual_branch, is_main_plugin)
+local function update_yaml(package_path, plugin_name, plugin_config, actual_branch, actual_tag, is_main_plugin)
 	-- Only save main plugins, skip dependencies
 	if not is_main_plugin then
 		return
@@ -353,6 +355,13 @@ local function update_yaml(package_path, plugin_name, plugin_config, actual_bran
 			-- Remove branch field if it's default
 			data.plugins[found_index].branch = nil
 		end
+		-- Save tag if exists (use actual_tag if provided, otherwise use plugin_config.tag)
+		local tag = actual_tag or plugin_config.tag
+		if tag then
+			data.plugins[found_index].tag = tag
+		else
+			data.plugins[found_index].tag = nil
+		end
 		data.plugins[found_index].repo = current_repo
 		data.plugins[found_index].depend = depend_repos
 	end
@@ -368,6 +377,11 @@ local function update_yaml(package_path, plugin_name, plugin_config, actual_bran
 		local branch = actual_branch or plugin_config.branch
 		if branch and branch ~= "main" and branch ~= "master" then
 			plugin_entry.branch = branch
+		end
+		-- Save tag if exists (use actual_tag if provided, otherwise use plugin_config.tag)
+		local tag = actual_tag or plugin_config.tag
+		if tag then
+			plugin_entry.tag = tag
 		end
 		table.insert(data.plugins, plugin_entry)
 	end
@@ -385,29 +399,47 @@ function M.install_plugin(plugin_config, git_config, package_path, is_main_plugi
 	local plugin_name = string_utils.get_plugin_name(repo)
 	local target_dir = git_utils.get_install_dir(plugin_name, "start", package_path)
 	
-	-- Determine branch: if plugin already exists, try to get branch from synapse.yaml first
+	-- Determine branch and tag: if plugin already exists, try to get from synapse.yaml first
+	-- But prioritize config tag if it exists
 	local branch = plugin_config.branch or "main"
+	local tag = plugin_config.tag  -- Always prioritize config tag
 	if vim.fn.isdirectory(target_dir) == 1 then
-		-- Plugin already exists, try to get branch from synapse.yaml
-		local yaml_branch = get_branch_from_yaml(package_path, plugin_name)
+		-- Plugin already exists, try to get branch and tag from synapse.yaml
+		local yaml_branch, yaml_tag = get_branch_tag_from_yaml(package_path, plugin_name)
 		if yaml_branch then
 			branch = yaml_branch
 		end
+		-- Only use YAML tag if config doesn't have one
+		if not tag and yaml_tag then
+			tag = yaml_tag
+		end
 	else
-		-- New plugin, use branch from config
+		-- New plugin, use branch and tag from config
 		branch = plugin_config.branch or "main"
+		tag = plugin_config.tag
 	end
 	
 	local repo_url = git_utils.get_repo_url(repo, git_config)
 
 	local command
 	if vim.fn.isdirectory(target_dir) == 1 then
-		-- 如果目录已存在，更新到指定分支
-		command = string.format("cd %s && git fetch origin && git checkout %s && git pull origin %s", 
-			vim.fn.shellescape(target_dir), branch, branch)
+		-- 如果目录已存在，更新到指定分支或 tag
+		if tag then
+			-- 如果有 tag，checkout 到该 tag
+			command = string.format("cd %s && git fetch origin --tags && git checkout %s", 
+				vim.fn.shellescape(target_dir), tag)
+		else
+			-- 否则更新到指定分支
+			command = string.format("cd %s && git fetch origin && git checkout %s && git pull origin %s", 
+				vim.fn.shellescape(target_dir), branch, branch)
+		end
 	else
-		-- 克隆指定分支
-		if branch == "main" or branch == "master" then
+		-- 克隆仓库
+		if tag then
+			-- 如果有 tag，克隆后 checkout 到该 tag
+			command = string.format("git clone %s %s && cd %s && git checkout %s", 
+				repo_url, vim.fn.shellescape(target_dir), vim.fn.shellescape(target_dir), tag)
+		elseif branch == "main" or branch == "master" then
 			command = string.format("git clone --depth 1 %s %s", repo_url, vim.fn.shellescape(target_dir))
 		else
 			command = string.format("git clone --depth 1 -b %s %s %s", branch, repo_url, vim.fn.shellescape(target_dir))
@@ -417,8 +449,8 @@ function M.install_plugin(plugin_config, git_config, package_path, is_main_plugi
 	git_utils.execute_command(command, function(success, err)
 		if success then
 			-- Update synapse.yaml on successful installation (only for main plugins)
-			-- Pass the actual branch used for installation
-			update_yaml(package_path, plugin_name, plugin_config, branch, is_main_plugin)
+			-- Pass the actual branch and tag used for installation
+			update_yaml(package_path, plugin_name, plugin_config, branch, tag, is_main_plugin)
 		end
 		callback(success, err)
 	end)

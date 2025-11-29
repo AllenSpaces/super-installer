@@ -34,6 +34,10 @@ function M.write(filepath, data)
 			if plugin.branch and plugin.branch ~= "main" and plugin.branch ~= "master" then
 				table.insert(lines, "    branch: " .. escape_yaml(plugin.branch))
 			end
+			-- Write tag if it exists
+			if plugin.tag then
+				table.insert(lines, "    tag: " .. escape_yaml(plugin.tag))
+			end
 			if plugin.depend and type(plugin.depend) == "table" and #plugin.depend > 0 then
 				table.insert(lines, "    depend:")
 				for _, dep in ipairs(plugin.depend) do
@@ -120,6 +124,14 @@ function M.read(filepath)
 			if branch then
 				branch = branch:gsub('^"', ""):gsub('"$', ""):gsub('\\"', '"')
 				current_plugin.branch = branch
+			end
+			in_depend = false
+		elseif current_plugin and indent == 4 and trimmed:match("^tag:") then
+			-- Tag field (indent level 4)
+			local tag = trimmed:match("tag:%s*(.+)")
+			if tag then
+				tag = tag:gsub('^"', ""):gsub('"$', ""):gsub('\\"', '"')
+				current_plugin.tag = tag
 			end
 			in_depend = false
 		elseif current_plugin and indent == 4 and trimmed:match("^depend:") then

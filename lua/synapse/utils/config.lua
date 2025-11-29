@@ -85,6 +85,11 @@ function M.load_config_files(config_path)
 						plugin_config.branch = config.clone_conf.branch
 					end
 
+					-- Extract tag if tag field exists
+					if config.tag and type(config.tag) == "string" and config.tag ~= "" then
+						plugin_config.tag = config.tag
+					end
+
 					-- Extract dependencies if depend field exists
 					if config.depend and type(config.depend) == "table" then
 						for _, dep in ipairs(config.depend) do

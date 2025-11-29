@@ -2,6 +2,7 @@ local ui = require("synapse.ui")
 local git_utils = require("synapse.utils.git")
 local config_utils = require("synapse.utils.config")
 local string_utils = require("synapse.utils.string")
+local yaml_utils = require("synapse.utils.yaml")
 
 local M = {}
 
@@ -24,6 +25,16 @@ function M.start(config)
 	}
 	table.insert(configs, 1, default_config)
 
+	-- 建立 repo 到 plugin_config 的映射（用于获取 tag 等信息）
+	local repo_to_config = {}
+	local main_plugin_repos = {} -- 用于判断是否是主插件
+	for _, plugin_config in ipairs(configs) do
+		if plugin_config.repo then
+			repo_to_config[plugin_config.repo] = plugin_config
+			main_plugin_repos[plugin_config.repo] = true
+		end
+	end
+
 	-- 提取所有 repo 字段（包括依赖项）
 	local plugins = {}
 	local plugin_set = {}
@@ -42,6 +53,14 @@ function M.start(config)
 					if not plugin_set[dep_repo] then
 						table.insert(plugins, dep_repo)
 						plugin_set[dep_repo] = true
+						-- 为依赖项创建默认配置（如果还没有）
+						if not repo_to_config[dep_repo] then
+							repo_to_config[dep_repo] = {
+								repo = dep_repo,
+								branch = "main",
+								config = {},
+							}
+						end
 					end
 				end
 			end
@@ -188,7 +207,7 @@ function M.start(config)
 					config.opts.ui
 				)
 
-				M.check_plugin(repo, config.opts.package_path, function(ok, result)
+				M.check_plugin(repo, config.opts.package_path, repo_to_config[repo], function(ok, result)
 					completed = completed + 1
 
 					if ok and result == "need_update" then
@@ -275,7 +294,8 @@ function M.start(config)
 					config.opts.ui
 				)
 
-				M.update_plugin(repo, config.opts.package_path, function(ok, err)
+				local is_main_plugin = main_plugin_repos[repo] == true
+				M.update_plugin(repo, config.opts.package_path, repo_to_config[repo], is_main_plugin, function(ok, err)
 					completed = completed + 1
 					if ok then
 						success_count = success_count + 1
@@ -330,7 +350,7 @@ function M.start(config)
 	start_update_flow(plugins)
 end
 
-function M.check_plugin(plugin, package_path, callback)
+function M.check_plugin(plugin, package_path, plugin_config, callback)
 	if is_update_aborted then
 		return callback(false, "Stop")
 	end
@@ -340,6 +360,31 @@ function M.check_plugin(plugin, package_path, callback)
 	local install_dir = git_utils.get_install_dir(plugin_name, "update", package_path)
 	if vim.fn.isdirectory(install_dir) ~= 1 then
 		return callback(false, "Directory is not found")
+	end
+
+	-- 检查 tag 是否变化
+	local yaml_path = yaml_utils.get_yaml_path(package_path)
+	local yaml_data, _ = yaml_utils.read(yaml_path)
+	local yaml_tag = nil
+	if yaml_data and yaml_data.plugins then
+		for _, p in ipairs(yaml_data.plugins) do
+			if p.name == plugin_name then
+				yaml_tag = p.tag
+				break
+			end
+		end
+	end
+	
+	local config_tag = plugin_config and plugin_config.tag or nil
+	
+	-- 如果配置中的 tag 与 YAML 中的不同，需要更新
+	if config_tag ~= yaml_tag then
+		return callback(true, "need_update")
+	end
+
+	-- 如果当前是 tag 模式，不需要检查分支更新
+	if yaml_tag or config_tag then
+		return callback(true, "already_updated")
 	end
 
 	local fetch_cmd = string.format("cd %s && git fetch --quiet", install_dir)
@@ -362,7 +407,7 @@ function M.check_plugin(plugin, package_path, callback)
 	table.insert(jobs, job)
 end
 
-function M.update_plugin(plugin, package_path, callback)
+function M.update_plugin(plugin, package_path, plugin_config, is_main_plugin, callback)
 	if is_update_aborted then
 		return callback(false, "Stop")
 	end
@@ -370,9 +415,105 @@ function M.update_plugin(plugin, package_path, callback)
 	local plugin_name = plugin:match("([^/]+)$")
 	plugin_name = plugin_name:gsub("%.git$", "")
 	local install_dir = git_utils.get_install_dir(plugin_name, "update", package_path)
-	local cmd = string.format("cd %s && git pull --quiet && git submodule update --init --recursive", install_dir)
+	
+	-- 获取配置中的 tag 和 YAML 中的 tag
+	local config_tag = plugin_config and plugin_config.tag or nil
+	local yaml_path = yaml_utils.get_yaml_path(package_path)
+	local yaml_data, _ = yaml_utils.read(yaml_path)
+	local yaml_tag = nil
+	local yaml_branch = nil
+	if yaml_data and yaml_data.plugins then
+		for _, p in ipairs(yaml_data.plugins) do
+			if p.name == plugin_name then
+				yaml_tag = p.tag
+				yaml_branch = p.branch
+				break
+			end
+		end
+	end
+	
+	local cmd
+	if config_tag then
+		-- 如果配置中有 tag，checkout 到该 tag
+		cmd = string.format("cd %s && git fetch origin --tags && git checkout %s && git submodule update --init --recursive", 
+			vim.fn.shellescape(install_dir), config_tag)
+	else
+		-- 否则使用分支更新
+		local branch = plugin_config and plugin_config.branch or yaml_branch or "main"
+		cmd = string.format("cd %s && git fetch origin && git checkout %s && git pull origin %s && git submodule update --init --recursive", 
+			vim.fn.shellescape(install_dir), branch, branch)
+	end
 
 	local job = git_utils.execute_command(cmd, function(ok, output)
+		if ok and plugin_config and is_main_plugin then
+			-- 使用与 install.lua 相同的逻辑更新 YAML
+			local actual_branch = nil
+			local actual_tag = config_tag
+			
+			-- 如果没有 tag，使用分支
+			if not config_tag then
+				actual_branch = plugin_config.branch or yaml_branch or "main"
+			end
+			
+			-- 复用 install.lua 中的 update_yaml 逻辑
+			local data, err = yaml_utils.read(yaml_path)
+			if not data then
+				data = { plugins = {} }
+			end
+			
+			-- Keep depend repos as full repo paths
+			local depend_repos = {}
+			if plugin_config.depend and type(plugin_config.depend) == "table" then
+				for _, dep_repo in ipairs(plugin_config.depend) do
+					table.insert(depend_repos, dep_repo)
+				end
+			end
+			
+			-- Check if plugin already exists
+			local found = false
+			local found_index = nil
+			for i, p in ipairs(data.plugins) do
+				if p.name == plugin_name then
+					found = true
+					found_index = i
+					break
+				end
+			end
+			
+			if found then
+				-- Update existing entry
+				if actual_branch and actual_branch ~= "main" and actual_branch ~= "master" then
+					data.plugins[found_index].branch = actual_branch
+				else
+					data.plugins[found_index].branch = nil
+				end
+				-- Update tag
+				if actual_tag then
+					data.plugins[found_index].tag = actual_tag
+				else
+					data.plugins[found_index].tag = nil
+				end
+				data.plugins[found_index].repo = plugin_config.repo
+				data.plugins[found_index].depend = depend_repos
+			else
+				-- Add new plugin if not found
+				local plugin_entry = {
+					name = plugin_name,
+					repo = plugin_config.repo,
+					depend = depend_repos,
+				}
+				if actual_branch and actual_branch ~= "main" and actual_branch ~= "master" then
+					plugin_entry.branch = actual_branch
+				end
+				if actual_tag then
+					plugin_entry.tag = actual_tag
+				end
+				table.insert(data.plugins, plugin_entry)
+			end
+			
+			-- Write back to file
+			yaml_utils.write(yaml_path, data)
+		end
 		callback(ok, ok and "Success" or output)
 	end)
 	table.insert(jobs, job)
