@@ -8,6 +8,35 @@ local M = {}
 
 local installation_active = true
 
+--- Execute commands sequentially in plugin directory
+--- @param commands table Array of command strings
+--- @param plugin_dir string Plugin installation directory
+--- @param callback function Callback function(success, err)
+local function execute_commands(commands, plugin_dir, callback)
+	if not commands or #commands == 0 then
+		return callback(true, nil)
+	end
+
+	local function run_next(index)
+		if index > #commands then
+			return callback(true, nil)
+		end
+
+		local cmd = commands[index]
+		local full_cmd = string.format("cd %s && %s", vim.fn.shellescape(plugin_dir), cmd)
+		
+		git_utils.execute_command(full_cmd, function(success, err)
+			if success then
+				run_next(index + 1)
+			else
+				callback(false, string.format("Execute command failed: %s - %s", cmd, err))
+			end
+		end)
+	end
+
+	run_next(1)
+end
+
 --- Ensure synapse.yaml exists, create empty file if it doesn't
 --- @param config table
 local function ensure_yaml_exists(config)
@@ -447,12 +476,28 @@ function M.install_plugin(plugin_config, git_config, package_path, is_main_plugi
 	end
 
 	git_utils.execute_command(command, function(success, err)
-		if success then
+		if not success then
+			return callback(false, err)
+		end
+
+		-- Execute post-install commands if specified
+		if plugin_config.execute and #plugin_config.execute > 0 then
+			execute_commands(plugin_config.execute, target_dir, function(exec_success, exec_err)
+				if not exec_success then
+					return callback(false, exec_err)
+				end
+
+				-- Update synapse.yaml on successful installation (only for main plugins)
+				-- Pass the actual branch and tag used for installation
+				update_yaml(package_path, plugin_name, plugin_config, branch, tag, is_main_plugin)
+				callback(true, nil)
+			end)
+		else
 			-- Update synapse.yaml on successful installation (only for main plugins)
 			-- Pass the actual branch and tag used for installation
 			update_yaml(package_path, plugin_name, plugin_config, branch, tag, is_main_plugin)
+			callback(true, nil)
 		end
-		callback(success, err)
 	end)
 end
 

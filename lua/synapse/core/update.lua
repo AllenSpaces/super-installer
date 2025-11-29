@@ -10,6 +10,35 @@ local is_update_aborted = false
 local update_win = nil
 local jobs = {}
 
+--- Execute commands sequentially in plugin directory
+--- @param commands table Array of command strings
+--- @param plugin_dir string Plugin installation directory
+--- @param callback function Callback function(success, err)
+local function execute_commands(commands, plugin_dir, callback)
+	if not commands or #commands == 0 then
+		return callback(true, nil)
+	end
+
+	local function run_next(index)
+		if index > #commands then
+			return callback(true, nil)
+		end
+
+		local cmd = commands[index]
+		local full_cmd = string.format("cd %s && %s", vim.fn.shellescape(plugin_dir), cmd)
+		
+		git_utils.execute_command(full_cmd, function(success, err)
+			if success then
+				run_next(index + 1)
+			else
+				callback(false, string.format("Execute command failed: %s - %s", cmd, err))
+			end
+		end)
+	end
+
+	run_next(1)
+end
+
 function M.start(config)
 	is_update_aborted = false
 	jobs = {}
@@ -445,76 +474,164 @@ function M.update_plugin(plugin, package_path, plugin_config, is_main_plugin, ca
 	end
 
 	local job = git_utils.execute_command(cmd, function(ok, output)
-		if ok and plugin_config and is_main_plugin then
-			-- 使用与 install.lua 相同的逻辑更新 YAML
-			local actual_branch = nil
-			local actual_tag = config_tag
-			
-			-- 如果没有 tag，使用分支
-			if not config_tag then
-				actual_branch = plugin_config.branch or yaml_branch or "main"
-			end
-			
-			-- 复用 install.lua 中的 update_yaml 逻辑
-			local data, err = yaml_utils.read(yaml_path)
-			if not data then
-				data = { plugins = {} }
-			end
-			
-			-- Keep depend repos as full repo paths
-			local depend_repos = {}
-			if plugin_config.depend and type(plugin_config.depend) == "table" then
-				for _, dep_repo in ipairs(plugin_config.depend) do
-					table.insert(depend_repos, dep_repo)
-				end
-			end
-			
-			-- Check if plugin already exists
-			local found = false
-			local found_index = nil
-			for i, p in ipairs(data.plugins) do
-				if p.name == plugin_name then
-					found = true
-					found_index = i
-					break
-				end
-			end
-			
-			if found then
-				-- Update existing entry
-				if actual_branch and actual_branch ~= "main" and actual_branch ~= "master" then
-					data.plugins[found_index].branch = actual_branch
-				else
-					data.plugins[found_index].branch = nil
-				end
-				-- Update tag
-				if actual_tag then
-					data.plugins[found_index].tag = actual_tag
-				else
-					data.plugins[found_index].tag = nil
-				end
-				data.plugins[found_index].repo = plugin_config.repo
-				data.plugins[found_index].depend = depend_repos
-			else
-				-- Add new plugin if not found
-				local plugin_entry = {
-					name = plugin_name,
-					repo = plugin_config.repo,
-					depend = depend_repos,
-				}
-				if actual_branch and actual_branch ~= "main" and actual_branch ~= "master" then
-					plugin_entry.branch = actual_branch
-				end
-				if actual_tag then
-					plugin_entry.tag = actual_tag
-				end
-				table.insert(data.plugins, plugin_entry)
-			end
-			
-			-- Write back to file
-			yaml_utils.write(yaml_path, data)
+		if not ok then
+			return callback(false, output)
 		end
-		callback(ok, ok and "Success" or output)
+
+		-- Execute post-update commands if specified
+		if plugin_config and plugin_config.execute and #plugin_config.execute > 0 then
+			execute_commands(plugin_config.execute, install_dir, function(exec_success, exec_err)
+				if not exec_success then
+					return callback(false, exec_err)
+				end
+
+				-- Update YAML if this is a main plugin
+				if is_main_plugin then
+					-- 使用与 install.lua 相同的逻辑更新 YAML
+					local actual_branch = nil
+					local actual_tag = config_tag
+					
+					-- 如果没有 tag，使用分支
+					if not config_tag then
+						actual_branch = plugin_config.branch or yaml_branch or "main"
+					end
+					
+					-- 复用 install.lua 中的 update_yaml 逻辑
+					local data, err = yaml_utils.read(yaml_path)
+					if not data then
+						data = { plugins = {} }
+					end
+					
+					-- Keep depend repos as full repo paths
+					local depend_repos = {}
+					if plugin_config.depend and type(plugin_config.depend) == "table" then
+						for _, dep_repo in ipairs(plugin_config.depend) do
+							table.insert(depend_repos, dep_repo)
+						end
+					end
+					
+					-- Check if plugin already exists
+					local found = false
+					local found_index = nil
+					for i, p in ipairs(data.plugins) do
+						if p.name == plugin_name then
+							found = true
+							found_index = i
+							break
+						end
+					end
+					
+					if found then
+						-- Update existing entry
+						if actual_branch and actual_branch ~= "main" and actual_branch ~= "master" then
+							data.plugins[found_index].branch = actual_branch
+						else
+							data.plugins[found_index].branch = nil
+						end
+						-- Update tag
+						if actual_tag then
+							data.plugins[found_index].tag = actual_tag
+						else
+							data.plugins[found_index].tag = nil
+						end
+						data.plugins[found_index].repo = plugin_config.repo
+						data.plugins[found_index].depend = depend_repos
+					else
+						-- Add new plugin if not found
+						local plugin_entry = {
+							name = plugin_name,
+							repo = plugin_config.repo,
+							depend = depend_repos,
+						}
+						if actual_branch and actual_branch ~= "main" and actual_branch ~= "master" then
+							plugin_entry.branch = actual_branch
+						end
+						if actual_tag then
+							plugin_entry.tag = actual_tag
+						end
+						table.insert(data.plugins, plugin_entry)
+					end
+					
+					-- Write back to file
+					yaml_utils.write(yaml_path, data)
+				end
+
+				callback(true, "Success")
+			end)
+		else
+			-- Update YAML if this is a main plugin
+			if plugin_config and is_main_plugin then
+				-- 使用与 install.lua 相同的逻辑更新 YAML
+				local actual_branch = nil
+				local actual_tag = config_tag
+				
+				-- 如果没有 tag，使用分支
+				if not config_tag then
+					actual_branch = plugin_config.branch or yaml_branch or "main"
+				end
+				
+				-- 复用 install.lua 中的 update_yaml 逻辑
+				local data, err = yaml_utils.read(yaml_path)
+				if not data then
+					data = { plugins = {} }
+				end
+				
+				-- Keep depend repos as full repo paths
+				local depend_repos = {}
+				if plugin_config.depend and type(plugin_config.depend) == "table" then
+					for _, dep_repo in ipairs(plugin_config.depend) do
+						table.insert(depend_repos, dep_repo)
+					end
+				end
+				
+				-- Check if plugin already exists
+				local found = false
+				local found_index = nil
+				for i, p in ipairs(data.plugins) do
+					if p.name == plugin_name then
+						found = true
+						found_index = i
+						break
+					end
+				end
+				
+				if found then
+					-- Update existing entry
+					if actual_branch and actual_branch ~= "main" and actual_branch ~= "master" then
+						data.plugins[found_index].branch = actual_branch
+					else
+						data.plugins[found_index].branch = nil
+					end
+					-- Update tag
+					if actual_tag then
+						data.plugins[found_index].tag = actual_tag
+					else
+						data.plugins[found_index].tag = nil
+					end
+					data.plugins[found_index].repo = plugin_config.repo
+					data.plugins[found_index].depend = depend_repos
+				else
+					-- Add new plugin if not found
+					local plugin_entry = {
+						name = plugin_name,
+						repo = plugin_config.repo,
+						depend = depend_repos,
+					}
+					if actual_branch and actual_branch ~= "main" and actual_branch ~= "master" then
+						plugin_entry.branch = actual_branch
+					end
+					if actual_tag then
+						plugin_entry.tag = actual_tag
+					end
+					table.insert(data.plugins, plugin_entry)
+				end
+				
+				-- Write back to file
+				yaml_utils.write(yaml_path, data)
+			end
+
+			callback(true, "Success")
+		end
 	end)
 	table.insert(jobs, job)
 end

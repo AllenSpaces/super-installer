@@ -101,6 +101,15 @@ return {
         branch = "main",  -- Default: "main"
     },
     
+    -- Tag version (optional, takes precedence over branch)
+    tag = "v0.1.0",  -- Lock to specific tag version
+    
+    -- Post-install/update commands (optional)
+    execute = {
+        "make",
+        "cargo build --release",
+    },  -- Or use a single string: execute = "make"
+    
     -- Dependencies (optional)
     depend = {
         "nvim-lua/plenary.nvim",
@@ -234,6 +243,24 @@ Synapse automatically handles plugin dependencies:
 3. **Priority**: If a dependency is also a main plugin, its configuration takes precedence
 4. **Protection**: Dependencies are protected during removal unless unused
 
+## Version Management
+
+Synapse supports both branch and tag-based version control:
+
+- **Tag Support**: Use `tag` field in plugin configuration to lock to a specific version
+  - When `tag` is specified, it takes precedence over `branch`
+  - Tag information is saved to `synapse.yaml` for persistence
+  - Updates will respect tag changes in configuration
+
+- **Branch Support**: Use `clone_conf.branch` to specify a branch
+  - Default branch is "main" if not specified
+  - Branch information is saved to `synapse.yaml` (only if not "main" or "master")
+
+- **synapse.yaml**: Automatically created in `package_path` directory
+  - Records installed plugins with their repository, branch, tag, and dependencies
+  - Only main plugins are recorded (dependencies are stored in `depend` field)
+  - Used to maintain consistency across installations and updates
+
 ## Examples
 
 ### Basic Plugin
@@ -278,6 +305,51 @@ return {
     end,
 }
 ```
+
+### Plugin with Tag Version
+
+```lua
+-- ~/.config/nvim/plugins/versioned.lua
+return {
+    repo = "username/repo-name",
+    tag = "v1.2.3",  -- Lock to specific tag version
+    config = function()
+        -- Your config
+    end,
+}
+```
+
+**Note**: When `tag` is specified, it takes precedence over `branch`. The plugin will be checked out to the specified tag version, and this tag will be recorded in `synapse.yaml` for future reference.
+
+### Plugin with Post-Install Commands
+
+```lua
+-- ~/.config/nvim/plugins/compiled.lua
+return {
+    repo = "username/compiled-plugin",
+    execute = {
+        "make",
+        "cargo build --release",
+    },  -- Commands executed sequentially after installation/update
+    config = function()
+        -- Your config
+    end,
+}
+```
+
+Or use a single command:
+
+```lua
+return {
+    repo = "username/compiled-plugin",
+    execute = "make",  -- Single command
+    config = function()
+        -- Your config
+    end,
+}
+```
+
+**Note**: The `execute` field supports both a single string or an array of strings. Commands are executed sequentially in the plugin's installation directory. If any command fails, the installation/update process will stop and report an error.
 
 ### Custom UI Colors
 

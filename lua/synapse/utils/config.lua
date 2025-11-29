@@ -90,6 +90,20 @@ function M.load_config_files(config_path)
 						plugin_config.tag = config.tag
 					end
 
+					-- Extract execute commands if execute field exists
+					if config.execute then
+						if type(config.execute) == "string" and config.execute ~= "" then
+							plugin_config.execute = { config.execute }
+						elseif type(config.execute) == "table" then
+							plugin_config.execute = {}
+							for _, cmd in ipairs(config.execute) do
+								if type(cmd) == "string" and cmd ~= "" then
+									table.insert(plugin_config.execute, cmd)
+								end
+							end
+						end
+					end
+
 					-- Extract dependencies if depend field exists
 					if config.depend and type(config.depend) == "table" then
 						for _, dep in ipairs(config.depend) do
