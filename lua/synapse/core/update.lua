@@ -479,8 +479,10 @@ function M.update_plugin(plugin, package_path, plugin_config, is_main_plugin, ca
 		end
 
 		-- Execute post-update commands if specified
-		if plugin_config and plugin_config.execute and #plugin_config.execute > 0 then
-			execute_commands(plugin_config.execute, install_dir, function(exec_success, exec_err)
+		-- 确保更新后如果有 execute 字段也要重新执行
+		local execute_cmds = plugin_config and plugin_config.execute or nil
+		if execute_cmds and type(execute_cmds) == "table" and #execute_cmds > 0 then
+			execute_commands(execute_cmds, install_dir, function(exec_success, exec_err)
 				if not exec_success then
 					return callback(false, exec_err)
 				end
