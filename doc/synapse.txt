@@ -182,7 +182,20 @@ Complete Setup Example: ~
             config_path = config_dir .. "/lua/plugins",
             
             -- Load configuration directory (scanned recursively for .config.lua files)
-            load_config = config_dir .. "/lua",
+            -- Can be a string path or a table with path and first fields
+            load_config = {
+                path = config_dir .. "/lua",
+                -- Optional: List of config files to load before synapse.setup()
+                -- These configs are executed immediately (no lazy loading)
+                -- Useful for setting leader key, basic options, etc.
+                first = {
+                    "custom.config",      -- Load configs/custom.config.lua first
+                    "commands.config",    -- Then load configs/commands.config.lua
+                    "keymaps.config",     -- Then load configs/keymaps.config.lua
+                },
+            },
+            -- Or use simple string format:
+            -- load_config = config_dir .. "/lua",
             
             -- UI customization
             ui = {
@@ -361,6 +374,37 @@ Load Configuration Files: ~
 Create `.config.lua` files in your `load_config` directory (supports
 subdirectories) to automatically load plugin configurations when Neovim
 starts.
+
+Priority Loading with `first` field: ~
+You can specify which configs should be loaded before `synapse.setup()` by
+using the `first` field:
+
+>
+    require("synapse").setup({
+        opts = {
+            load_config = {
+                path = vim.fn.stdpath("config") .. "/lua",
+                first = {
+                    "custom.config",      -- Load first (e.g., sets leader key)
+                    "commands.config",    -- Load second
+                    "keymaps.config",     -- Load third
+                },
+            },
+        },
+    })
+<
+
+Important Notes: ~
+    • Configs in `first` list are loaded **BEFORE** `synapse.setup()` executes
+    • They are executed **IMMEDIATELY** (even if they have `loaded` field for
+      lazy loading)
+    • This ensures critical settings (like `leader` key) are available when
+      synapse sets up keymaps
+    • The `first` list supports multiple name formats:
+      - "custom.config" - matches files like configs/custom.config.lua
+      - "configs.custom" - matches files like configs/custom.config.lua
+      - "custom" - matches files like configs/custom.config.lua
+    • Configs are loaded in the order specified in the `first` array
 
 Basic Format: ~
 >
@@ -547,12 +591,44 @@ opts.config_path                          *synapse-options-opts-config-path*
     repositories, dependencies, tags, and execute commands.
 
 opts.load_config                          *synapse-options-opts-load-config*
-    Type: String
+    Type: String or Table
     Default: vim.fn.stdpath("config") .. "/lua"
     Description: Directory to scan for plugin load configuration files
     (recursive scan). Scans for all `.config.lua` files that contain plugin
     configuration functions. These files are loaded when Neovim starts and
     execute the `config()` function to set up plugins.
+
+    Table Format: ~
+>
+        load_config = {
+            path = vim.fn.stdpath("config") .. "/lua",  -- Directory to scan
+            first = {                                    -- Optional: Priority configs
+                "custom.config",
+                "commands.config",
+                "keymaps.config",
+            },
+        }
+<
+
+    String Format (simple): ~
+>
+        load_config = vim.fn.stdpath("config") .. "/lua"
+<
+
+    opts.load_config.first                  *synapse-options-load-config-first*
+        Type: Table (array of strings)
+        Description: List of configuration files to load **BEFORE**
+        `synapse.setup()` executes. These configs are executed immediately,
+        even if they have `loaded` field for lazy loading. This ensures
+        critical settings (like `leader` key) are available when synapse
+        sets up keymaps.
+        
+        Name Formats Supported: ~
+            • "custom.config" - matches files like configs/custom.config.lua
+            • "configs.custom" - matches files like configs/custom.config.lua
+            • "custom" - matches files like configs/custom.config.lua
+        
+        Order: Configs are loaded in the order specified in the `first` array.
 
 opts.ui                                          *synapse-options-opts-ui*
     Type: Table

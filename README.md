@@ -103,7 +103,20 @@ require("synapse").setup({
         config_path = config_dir .. "/lua/plugins",
         
         -- Load configuration directory (scanned recursively for .config.lua files)
-        load_config = config_dir .. "/lua",
+        -- Can be a string path or a table with path and first fields
+        load_config = {
+            path = config_dir .. "/lua",
+            -- Optional: List of config files to load before synapse.setup()
+            -- These configs are executed immediately (no lazy loading)
+            -- Useful for setting leader key, basic options, etc.
+            first = {
+                "custom.config",      -- Load configs/custom.config.lua first
+                "commands.config",    -- Then load configs/commands.config.lua
+                "keymaps.config",     -- Then load configs/keymaps.config.lua
+            },
+        },
+        -- Or use simple string format:
+        -- load_config = config_dir .. "/lua",
         
         -- UI customization
         ui = {
@@ -230,6 +243,30 @@ return {
 These files contain plugin configuration functions that are executed when Neovim starts.
 
 **Location**: `load_config` directory (recursively scanned)
+
+**Priority Loading with `first` field**: You can specify which configs should be loaded before `synapse.setup()` by using the `first` field:
+
+```lua
+require("synapse").setup({
+    opts = {
+        load_config = {
+            path = vim.fn.stdpath("config") .. "/lua",
+            first = {
+                "*.config",
+            },
+        },
+    },
+})
+```
+
+**Important Notes**:
+- Configs in `first` list are loaded **before** `synapse.setup()` executes
+- They are executed **immediately** (even if they have `loaded` field for lazy loading)
+- This ensures critical settings (like `leader` key) are available when synapse sets up keymaps
+- The `first` list supports multiple name formats:
+  - `"custom.config"` - matches `configs/custom.config.lua`
+  - `"configs.custom"` - matches `configs/custom.config.lua`
+  - `"custom"` - matches `configs/custom.config.lua`
 
 **Example**: `config_dir/lua/plugins/example.config.lua`
 
@@ -422,7 +459,13 @@ require("synapse").setup({
     opts = {
         package_path = package_dir,
         config_path = config_dir .. "/lua/plugins",
-        load_config = config_dir .. "/lua",
+        load_config = {
+            path = config_dir .. "/lua",
+            -- Load these configs before synapse.setup() (e.g., to set leader key)
+            first = {
+                "*.config",
+            },
+        },
         ui = {
             style = "float",
         },
@@ -434,6 +477,8 @@ require("synapse").setup({
     },
 })
 ```
+
+**Note**: The `first` field ensures that `custom.config` (which sets `leader` key) is loaded before `synapse.setup()` executes, so the keymaps can use `<leader>` correctly.
 
 ### Plugin with Dependencies
 
