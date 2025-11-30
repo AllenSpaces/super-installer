@@ -1,4 +1,5 @@
 local ui = require("synapse.ui")
+local error_ui = require("synapse.ui.error")
 local git_utils = require("synapse.utils.git")
 local config_utils = require("synapse.utils.config")
 local string_utils = require("synapse.utils.string")
@@ -42,6 +43,8 @@ end
 function M.start(config)
 	is_update_aborted = false
 	jobs = {}
+	-- Clear error cache at start
+	error_ui.clear_cache()
 
 	-- 从 config_path 读取配置文件
 	local configs = config_utils.load_config_files(config.opts.config_path)
@@ -49,7 +52,7 @@ function M.start(config)
 	-- 添加默认插件
 	local default_config = {
 		repo = config.opts.default,
-		branch = "main",
+		-- Don't set branch by default, let git use default branch
 		config = {},
 	}
 	table.insert(configs, 1, default_config)
@@ -86,7 +89,7 @@ function M.start(config)
 						if not repo_to_config[dep_repo] then
 							repo_to_config[dep_repo] = {
 								repo = dep_repo,
-								branch = "main",
+								-- Don't set branch by default, let git use default branch
 								config = {},
 							}
 						end
@@ -243,6 +246,8 @@ function M.start(config)
 						table.insert(pending_update, repo)
 					elseif not ok then
 						table.insert(errors, { plugin = plugin_name, error = result, repo = repo })
+						-- Save error to cache (don't show window automatically)
+						error_ui.save_error(plugin_name, result or "Check failed")
 					end
 
 					ui.update_progress(
@@ -330,6 +335,8 @@ function M.start(config)
 						success_count = success_count + 1
 					else
 						table.insert(update_errors, { plugin = plugin_name, error = err, repo = repo })
+						-- Save error to cache (don't show window automatically)
+						error_ui.save_error(plugin_name, err or "Update failed")
 					end
 
 					ui.update_progress(
@@ -467,10 +474,17 @@ function M.update_plugin(plugin, package_path, plugin_config, is_main_plugin, ca
 		cmd = string.format("cd %s && git fetch origin --tags && git checkout %s && git submodule update --init --recursive", 
 			vim.fn.shellescape(install_dir), config_tag)
 	else
-		-- 否则使用分支更新
-		local branch = plugin_config and plugin_config.branch or yaml_branch or "main"
-		cmd = string.format("cd %s && git fetch origin && git checkout %s && git pull origin %s && git submodule update --init --recursive", 
-			vim.fn.shellescape(install_dir), branch, branch)
+		-- 获取分支，如果没有配置分支就不使用分支参数
+		local branch = plugin_config and plugin_config.branch or yaml_branch
+		if branch then
+			-- 如果有 branch，更新到指定分支
+			cmd = string.format("cd %s && git fetch origin && git checkout %s && git pull origin %s && git submodule update --init --recursive", 
+				vim.fn.shellescape(install_dir), branch, branch)
+		else
+			-- 没有 branch，直接 pull
+			cmd = string.format("cd %s && git fetch origin && git pull origin && git submodule update --init --recursive", 
+				vim.fn.shellescape(install_dir))
+		end
 	end
 
 	local job = git_utils.execute_command(cmd, function(ok, output)
@@ -493,9 +507,9 @@ function M.update_plugin(plugin, package_path, plugin_config, is_main_plugin, ca
 					local actual_branch = nil
 					local actual_tag = config_tag
 					
-					-- 如果没有 tag，使用分支
+					-- 如果没有 tag，使用分支（不默认使用 "main"）
 					if not config_tag then
-						actual_branch = plugin_config.branch or yaml_branch or "main"
+						actual_branch = plugin_config and plugin_config.branch or yaml_branch
 					end
 					
 					-- 复用 install.lua 中的 update_yaml 逻辑
@@ -567,9 +581,9 @@ function M.update_plugin(plugin, package_path, plugin_config, is_main_plugin, ca
 				local actual_branch = nil
 				local actual_tag = config_tag
 				
-				-- 如果没有 tag，使用分支
+				-- 如果没有 tag，使用分支（不默认使用 "main"）
 				if not config_tag then
-					actual_branch = plugin_config.branch or yaml_branch or "main"
+					actual_branch = plugin_config and plugin_config.branch or yaml_branch
 				end
 				
 				-- 复用 install.lua 中的 update_yaml 逻辑

@@ -75,7 +75,8 @@ function M.load_config_files(config_path)
 					-- Extract config information
 					local plugin_config = {
 						repo = config.repo,
-						branch = "main", -- Default main branch
+						-- Don't set branch by default, only use it if explicitly specified
+						branch = nil,
 						config = config.config or {},
 						depend = {}, -- Dependency list
 					}

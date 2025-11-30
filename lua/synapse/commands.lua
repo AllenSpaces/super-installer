@@ -16,6 +16,11 @@ function M.setup(config)
 		require("synapse.core.update").start(config)
 	end, {})
 
+	vim.api.nvim_create_user_command("SynapseError", function()
+		local error_ui = require("synapse.ui.error")
+		error_ui.show_all_errors()
+	end, {})
+
 	-- Keymaps
 	local keymap_options = { noremap = true, silent = true }
 	vim.keymap.set("n", config.keys.download, "<cmd>SynapseDownload<CR>", keymap_options)

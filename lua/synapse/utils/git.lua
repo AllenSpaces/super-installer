@@ -67,8 +67,8 @@ function M.execute_command(cmd, callback)
 					is_up_to_date and ("Already up-to-date: " .. formatted_msg) or ("Success: " .. formatted_msg)
 				)
 			else
-				local error_msg = #stderr_msg > 0 and (stderr_msg:gsub("\n", " "):sub(1, 50) .. "...")
-					or "Unknown error occurred"
+				-- Return full error message without truncation
+				local error_msg = #stderr_msg > 0 and stderr_msg or "Unknown error occurred"
 				callback(false, error_msg)
 			end
 		end,

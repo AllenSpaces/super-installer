@@ -1,4 +1,5 @@
 local ui = require("synapse.ui")
+local error_ui = require("synapse.ui.error")
 local git_utils = require("synapse.utils.git")
 local config_utils = require("synapse.utils.config")
 local yaml_utils = require("synapse.utils.yaml")
@@ -10,6 +11,8 @@ local cleanup_active = true
 
 function M.start(config)
 	cleanup_active = true
+	-- Clear error cache at start
+	error_ui.clear_cache()
 	-- 从 config_path 读取配置文件
 	local configs = config_utils.load_config_files(config.opts.config_path)
 	
@@ -139,6 +142,8 @@ function M.start(config)
 				else
 					table.insert(errors, { plugin = plugin, error = err or "Removal failed" })
 					table.insert(failed_list, plugin)
+					-- Save error to cache (don't show window automatically)
+					error_ui.save_error(plugin, err or "Removal failed")
 				end
 
 				if progress_win then

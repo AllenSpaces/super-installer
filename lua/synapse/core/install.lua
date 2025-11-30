@@ -1,4 +1,5 @@
 local ui = require("synapse.ui")
+local error_ui = require("synapse.ui.error")
 local git_utils = require("synapse.utils.git")
 local config_utils = require("synapse.utils.config")
 local string_utils = require("synapse.utils.string")
@@ -54,6 +55,8 @@ end
 
 function M.start(config)
 	installation_active = true
+	-- Clear error cache at start
+	error_ui.clear_cache()
 
 	-- Check and create synapse.yaml if it doesn't exist
 	ensure_yaml_exists(config)
@@ -64,7 +67,7 @@ function M.start(config)
 	-- 添加默认插件
 	local default_config = {
 		repo = config.opts.default,
-		branch = "main",
+		-- Don't set branch by default, let git use default branch
 		config = {},
 	}
 	table.insert(configs, 1, default_config)
@@ -114,10 +117,10 @@ function M.start(config)
 					-- 递归处理依赖项的依赖项
 					collect_dependencies(main_plugin_map[dep_repo])
 				else
-					-- 如果只是依赖项，使用默认配置
+					-- 如果只是依赖项，使用默认配置（不设置 branch，使用 git 默认分支）
 					all_plugins[dep_repo] = {
 						repo = dep_repo,
-						branch = "main",
+						-- Don't set branch by default, let git use default branch
 						config = {},
 						depend = {},
 					}
@@ -142,14 +145,31 @@ function M.start(config)
 		end
 	end
 	
-	-- 转换为列表并过滤已安装的插件
+	-- 转换为列表并过滤已安装的插件，确保依赖项在主插件之前安装
 	local pending_install = {}
+	local dependencies = {}
+	local main_plugins = {}
+	
 	for repo, plugin_config in pairs(all_plugins) do
 		local plugin_name = repo:match("([^/]+)$")
 		plugin_name = plugin_name:gsub("%.git$", "")
 		if not existing_plugins[plugin_name] and plugin_name ~= "synapse" and plugin_name ~= "synapse.nvim" then
-			table.insert(pending_install, plugin_config)
+			-- 如果是主插件，添加到主插件列表
+			if main_plugin_repos[repo] then
+				table.insert(main_plugins, plugin_config)
+			else
+				-- 如果是依赖项，添加到依赖项列表
+				table.insert(dependencies, plugin_config)
+			end
 		end
+	end
+	
+	-- 先添加依赖项，再添加主插件，确保依赖项先安装
+	for _, dep in ipairs(dependencies) do
+		table.insert(pending_install, dep)
+	end
+	for _, main in ipairs(main_plugins) do
+		table.insert(pending_install, main)
 	end
 
 	if #pending_install == 0 then
@@ -246,6 +266,8 @@ function M.start(config)
 				else
 					table.insert(errors, { plugin = plugin_name, error = err })
 					table.insert(failed_list, plugin_name)
+					-- Save error to cache (don't show window automatically)
+					error_ui.save_error(plugin_name, err or "Installation failed")
 				end
 
 				ui.update_progress(
@@ -430,12 +452,13 @@ function M.install_plugin(plugin_config, git_config, package_path, is_main_plugi
 	
 	-- Determine branch and tag: if plugin already exists, try to get from synapse.yaml first
 	-- But prioritize config tag if it exists
-	local branch = plugin_config.branch or "main"
+	local branch = plugin_config.branch  -- Don't default to "main", use nil if not specified
 	local tag = plugin_config.tag  -- Always prioritize config tag
 	if vim.fn.isdirectory(target_dir) == 1 then
 		-- Plugin already exists, try to get branch and tag from synapse.yaml
 		local yaml_branch, yaml_tag = get_branch_tag_from_yaml(package_path, plugin_name)
-		if yaml_branch then
+		-- Only use yaml_branch if it's not "main" or "master" (these shouldn't be used)
+		if not branch and yaml_branch and yaml_branch ~= "main" and yaml_branch ~= "master" then
 			branch = yaml_branch
 		end
 		-- Only use YAML tag if config doesn't have one
@@ -443,8 +466,8 @@ function M.install_plugin(plugin_config, git_config, package_path, is_main_plugi
 			tag = yaml_tag
 		end
 	else
-		-- New plugin, use branch and tag from config
-		branch = plugin_config.branch or "main"
+		-- New plugin, use branch and tag from config (don't default to "main")
+		branch = plugin_config.branch
 		tag = plugin_config.tag
 	end
 	
@@ -457,10 +480,14 @@ function M.install_plugin(plugin_config, git_config, package_path, is_main_plugi
 			-- 如果有 tag，checkout 到该 tag
 			command = string.format("cd %s && git fetch origin --tags && git checkout %s", 
 				vim.fn.shellescape(target_dir), tag)
-		else
-			-- 否则更新到指定分支
+		elseif branch then
+			-- 如果有 branch，更新到指定分支
 			command = string.format("cd %s && git fetch origin && git checkout %s && git pull origin %s", 
 				vim.fn.shellescape(target_dir), branch, branch)
+		else
+			-- 没有 branch 和 tag，直接 pull
+			command = string.format("cd %s && git fetch origin && git pull origin", 
+				vim.fn.shellescape(target_dir))
 		end
 	else
 		-- 克隆仓库
@@ -468,10 +495,12 @@ function M.install_plugin(plugin_config, git_config, package_path, is_main_plugi
 			-- 如果有 tag，克隆后 checkout 到该 tag
 			command = string.format("git clone %s %s && cd %s && git checkout %s", 
 				repo_url, vim.fn.shellescape(target_dir), vim.fn.shellescape(target_dir), tag)
-		elseif branch == "main" or branch == "master" then
-			command = string.format("git clone --depth 1 %s %s", repo_url, vim.fn.shellescape(target_dir))
-		else
+		elseif branch then
+			-- 如果有 branch，克隆指定分支
 			command = string.format("git clone --depth 1 -b %s %s %s", branch, repo_url, vim.fn.shellescape(target_dir))
+		else
+			-- 没有 branch 和 tag，克隆默认分支
+			command = string.format("git clone --depth 1 %s %s", repo_url, vim.fn.shellescape(target_dir))
 		end
 	end
 
