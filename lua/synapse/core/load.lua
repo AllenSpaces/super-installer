@@ -58,6 +58,7 @@ local function safe_require(module_name, file_path)
 end
 
 local config_utils = require("synapse.utils.config")
+local string_utils = require("synapse.utils.string")
 
 local M = {}
 
@@ -95,6 +96,52 @@ local function load_dependency_opt(repo, opt)
 	end
 end
 
+--- Extract plugin name from module, repo, module name or file path
+--- @param mod table Module table (may contain repo field)
+--- @param module_name string Module name (e.g., "pkgs.snips.config")
+--- @param file_path string File path
+--- @return string|nil Plugin name
+local function extract_plugin_name(mod, module_name, file_path)
+	-- First, try to extract from repo field if available
+	if mod and mod.repo and type(mod.repo) == "string" then
+		return string_utils.get_plugin_name(mod.repo)
+	end
+	
+	-- Try to extract from module name
+	-- Examples:
+	--   "pkgs.snips.config" -> "snips"
+	--   "configs.plugin.config" -> "plugin"
+	--   "plugin.config" -> "plugin"
+	local parts = {}
+	for part in module_name:gmatch("([^%.]+)") do
+		table.insert(parts, part)
+	end
+	
+	-- Remove "config" suffix if present
+	if #parts > 0 and parts[#parts] == "config" then
+		table.remove(parts)
+	end
+	
+	-- Get the last part as plugin name
+	if #parts > 0 then
+		local name = parts[#parts]
+		if name and name ~= "config" then
+			return name
+		end
+	end
+	
+	-- Try from file path
+	if file_path then
+		local basename = vim.fn.fnamemodify(file_path, ":t:r")
+		local name = basename:gsub("%.config$", "")
+		if name and name ~= "" and name ~= "config" then
+			return name
+		end
+	end
+	
+	return nil
+end
+
 --- Execute config function for a module
 --- @param module table Module information
 --- @param immediate boolean If true, execute immediately even if loaded is set
@@ -104,7 +151,75 @@ local function execute_config(module, immediate)
 	end
 	
 	local mod = safe_require(module.name, module.file_path)
-	if mod and mod.config then
+	if not mod then
+		return
+	end
+	
+	-- Support config as table: directly call plugin.setup(config)
+	if mod.config and type(mod.config) == "table" then
+		local plugin_name = extract_plugin_name(mod, module.name, module.file_path)
+		if not plugin_name then
+			vim.notify(
+				"Failed to extract plugin name from " .. module.name,
+				vim.log.levels.WARN,
+				{ title = "Synapse" }
+			)
+			return
+		end
+		
+		-- Try multiple possible plugin names
+		local possible_names = { plugin_name }
+		
+		-- If plugin_name contains uppercase, also try lowercase version
+		if plugin_name:match("%u") then
+			table.insert(possible_names, plugin_name:lower())
+		end
+		
+		-- If plugin_name ends with -nvim or .nvim, try without it
+		local base_name = plugin_name:gsub("%-nvim$", ""):gsub("%.nvim$", "")
+		if base_name ~= plugin_name then
+			table.insert(possible_names, base_name)
+		end
+		
+		local setup_success = false
+		for _, name in ipairs(possible_names) do
+			local ok, plugin = pcall(require, name)
+			if ok and plugin then
+				if plugin.setup then
+					local setup_ok, setup_err = pcall(plugin.setup, mod.config)
+					if setup_ok then
+						setup_success = true
+						break
+					else
+						vim.notify(
+							"Error setting up " .. name .. ": " .. tostring(setup_err),
+							vim.log.levels.WARN,
+							{ title = "Synapse" }
+						)
+					end
+				else
+					vim.notify(
+						"Plugin " .. name .. " does not have a setup function",
+						vim.log.levels.WARN,
+						{ title = "Synapse" }
+					)
+				end
+			end
+		end
+		
+		if not setup_success then
+			vim.notify(
+				"Failed to setup plugin for " .. module.name .. " (tried: " .. table.concat(possible_names, ", ") .. "). Plugin may not be installed yet.",
+				vim.log.levels.WARN,
+				{ title = "Synapse" }
+			)
+		end
+		
+		return
+	end
+	
+	-- Support config as function (original behavior)
+	if mod.config and type(mod.config) == "function" then
 		-- If immediate is true, skip lazy loading and execute immediately
 		if immediate then
 			local ok, err = pcall(mod.config)
