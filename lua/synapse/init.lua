@@ -10,9 +10,9 @@ function M.setup(user_config)
 	vim.opt.rtp:append(merged_config.opts.package_path .. "/*")
 	vim.opt.rtp:append(merged_config.opts.package_path .. "/*/after")
 	
-	-- Load configs
+	-- Load configs (including dependency opt configurations)
 	if merged_config.opts.load_config then
-		load_config.load_config(merged_config.opts.load_config)
+		load_config.load_config(merged_config.opts.load_config, merged_config.opts.config_path)
 	end
 
 	-- Setup commands and keymaps

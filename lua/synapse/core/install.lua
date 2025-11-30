@@ -5,6 +5,14 @@ local config_utils = require("synapse.utils.config")
 local string_utils = require("synapse.utils.string")
 local yaml_utils = require("synapse.utils.yaml")
 
+--- Parse a dependency item (supports both string and table formats)
+--- @param dep string|table Dependency item
+--- @return string repo Repository path
+--- @return table|nil opt Optional configuration table
+local function parse_dependency(dep)
+	return config_utils.parse_dependency(dep)
+end
+
 local M = {}
 
 local installation_active = true
@@ -109,8 +117,9 @@ function M.start(config)
 			return
 		end
 		
-		for _, dep_repo in ipairs(plugin_config.depend) do
-			if not processed_repos[dep_repo] then
+		for _, dep_item in ipairs(plugin_config.depend) do
+			local dep_repo, dep_opt = parse_dependency(dep_item)
+			if dep_repo and not processed_repos[dep_repo] then
 				-- 如果依赖项本身也是主插件，使用主插件的配置
 				if main_plugin_map[dep_repo] then
 					all_plugins[dep_repo] = main_plugin_map[dep_repo]
@@ -118,12 +127,17 @@ function M.start(config)
 					collect_dependencies(main_plugin_map[dep_repo])
 				else
 					-- 如果只是依赖项，使用默认配置（不设置 branch，使用 git 默认分支）
-					all_plugins[dep_repo] = {
+					-- 如果有 opt 配置，保存它
+					local dep_config = {
 						repo = dep_repo,
 						-- Don't set branch by default, let git use default branch
 						config = {},
 						depend = {},
 					}
+					if dep_opt then
+						dep_config.opt = dep_opt
+					end
+					all_plugins[dep_repo] = dep_config
 				end
 				processed_repos[dep_repo] = true
 			end
@@ -330,10 +344,14 @@ local function update_yaml(package_path, plugin_name, plugin_config, actual_bran
 	end
 	
 	-- Keep depend repos as full repo paths (e.g., "nvim-lua/plenary.nvim")
+	-- Extract repo strings from dependency items (support both string and table formats)
 	local depend_repos = {}
 	if plugin_config.depend and type(plugin_config.depend) == "table" then
-		for _, dep_repo in ipairs(plugin_config.depend) do
-			table.insert(depend_repos, dep_repo)
+		for _, dep_item in ipairs(plugin_config.depend) do
+			local dep_repo = parse_dependency(dep_item)
+			if dep_repo then
+				table.insert(depend_repos, dep_repo)
+			end
 		end
 	end
 	
@@ -341,8 +359,11 @@ local function update_yaml(package_path, plugin_name, plugin_config, actual_bran
 	local all_depend_repos = {}
 	for _, plugin in ipairs(data.plugins) do
 		if plugin.depend and type(plugin.depend) == "table" then
-			for _, dep_repo in ipairs(plugin.depend) do
-				all_depend_repos[dep_repo] = true
+			for _, dep_item in ipairs(plugin.depend) do
+				local dep_repo = parse_dependency(dep_item)
+				if dep_repo then
+					all_depend_repos[dep_repo] = true
+				end
 			end
 		end
 	end
@@ -377,7 +398,8 @@ local function update_yaml(package_path, plugin_name, plugin_config, actual_bran
 		local is_in_other_depend = false
 		for _, plugin in ipairs(data.plugins) do
 			if plugin.name ~= plugin_name and plugin.depend and type(plugin.depend) == "table" then
-				for _, dep_repo in ipairs(plugin.depend) do
+				for _, dep_item in ipairs(plugin.depend) do
+					local dep_repo = parse_dependency(dep_item)
 					if dep_repo == current_repo then
 						is_in_other_depend = true
 						break

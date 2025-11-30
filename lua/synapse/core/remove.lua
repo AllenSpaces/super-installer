@@ -5,6 +5,14 @@ local config_utils = require("synapse.utils.config")
 local yaml_utils = require("synapse.utils.yaml")
 local string_utils = require("synapse.utils.string")
 
+--- Parse a dependency item (supports both string and table formats)
+--- @param dep string|table Dependency item
+--- @return string repo Repository path
+--- @return table|nil opt Optional configuration table
+local function parse_dependency(dep)
+	return config_utils.parse_dependency(dep)
+end
+
 local M = {}
 
 local cleanup_active = true
@@ -34,10 +42,13 @@ function M.start(config)
 			
 			-- 添加依赖项
 			if plugin_config.depend and type(plugin_config.depend) == "table" then
-				for _, dep_repo in ipairs(plugin_config.depend) do
-					local dep_name = dep_repo:match("([^/]+)$")
-					dep_name = dep_name:gsub("%.git$", "")
-					required_plugins[dep_name] = true
+				for _, dep_item in ipairs(plugin_config.depend) do
+					local dep_repo = parse_dependency(dep_item)
+					if dep_repo then
+						local dep_name = dep_repo:match("([^/]+)$")
+						dep_name = dep_name:gsub("%.git$", "")
+						required_plugins[dep_name] = true
+					end
 				end
 			end
 		end
@@ -182,10 +193,13 @@ local function is_dependency_referenced(dep_name, package_path, exclude_plugin)
 	-- Check all plugins except the one being removed
 	for _, plugin in ipairs(data.plugins) do
 		if plugin.name ~= exclude_plugin and plugin.depend then
-			for _, dep in ipairs(plugin.depend) do
-				local dep_plugin_name = string_utils.get_plugin_name(dep)
-				if dep_plugin_name == dep_name then
-					return true
+			for _, dep_item in ipairs(plugin.depend) do
+				local dep_repo = parse_dependency(dep_item)
+				if dep_repo then
+					local dep_plugin_name = string_utils.get_plugin_name(dep_repo)
+					if dep_plugin_name == dep_name then
+						return true
+					end
 				end
 			end
 		end

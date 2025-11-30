@@ -5,6 +5,14 @@ local config_utils = require("synapse.utils.config")
 local string_utils = require("synapse.utils.string")
 local yaml_utils = require("synapse.utils.yaml")
 
+--- Parse a dependency item (supports both string and table formats)
+--- @param dep string|table Dependency item
+--- @return string repo Repository path
+--- @return table|nil opt Optional configuration table
+local function parse_dependency(dep)
+	return config_utils.parse_dependency(dep)
+end
+
 local M = {}
 
 local is_update_aborted = false
@@ -81,17 +89,22 @@ function M.start(config)
 			
 			-- 添加依赖项
 			if plugin_config.depend and type(plugin_config.depend) == "table" then
-				for _, dep_repo in ipairs(plugin_config.depend) do
-					if not plugin_set[dep_repo] then
+				for _, dep_item in ipairs(plugin_config.depend) do
+					local dep_repo, dep_opt = parse_dependency(dep_item)
+					if dep_repo and not plugin_set[dep_repo] then
 						table.insert(plugins, dep_repo)
 						plugin_set[dep_repo] = true
 						-- 为依赖项创建默认配置（如果还没有）
 						if not repo_to_config[dep_repo] then
-							repo_to_config[dep_repo] = {
+							local dep_config = {
 								repo = dep_repo,
 								-- Don't set branch by default, let git use default branch
 								config = {},
 							}
+							if dep_opt then
+								dep_config.opt = dep_opt
+							end
+							repo_to_config[dep_repo] = dep_config
 						end
 					end
 				end
@@ -521,8 +534,11 @@ function M.update_plugin(plugin, package_path, plugin_config, is_main_plugin, ca
 					-- Keep depend repos as full repo paths
 					local depend_repos = {}
 					if plugin_config.depend and type(plugin_config.depend) == "table" then
-						for _, dep_repo in ipairs(plugin_config.depend) do
-							table.insert(depend_repos, dep_repo)
+						for _, dep_item in ipairs(plugin_config.depend) do
+							local dep_repo = parse_dependency(dep_item)
+							if dep_repo then
+								table.insert(depend_repos, dep_repo)
+							end
 						end
 					end
 					
@@ -595,8 +611,11 @@ function M.update_plugin(plugin, package_path, plugin_config, is_main_plugin, ca
 				-- Keep depend repos as full repo paths
 				local depend_repos = {}
 				if plugin_config.depend and type(plugin_config.depend) == "table" then
-					for _, dep_repo in ipairs(plugin_config.depend) do
-						table.insert(depend_repos, dep_repo)
+					for _, dep_item in ipairs(plugin_config.depend) do
+						local dep_repo = parse_dependency(dep_item)
+						if dep_repo then
+							table.insert(depend_repos, dep_repo)
+						end
 					end
 				end
 				

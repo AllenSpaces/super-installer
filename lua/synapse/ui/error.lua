@@ -20,11 +20,11 @@ end
 --- @return table lines
 local function format_error_content(plugin_name, error_message)
 	local lines = {}
-	
+
 	-- Plugin name as level 1 heading
 	table.insert(lines, "# " .. plugin_name)
 	table.insert(lines, "")
-	
+
 	-- Error message as error admonition
 	table.insert(lines, "> [!ERROR]")
 	-- Handle multi-line error messages and ensure all content is shown
@@ -32,7 +32,7 @@ local function format_error_content(plugin_name, error_message)
 	if error_message_str == "" then
 		error_message_str = "Unknown error"
 	end
-	
+
 	-- Split by newlines and preserve all content
 	local error_lines = vim.split(error_message_str, "\n")
 	for _, line in ipairs(error_lines) do
@@ -43,12 +43,12 @@ local function format_error_content(plugin_name, error_message)
 			table.insert(lines, "> " .. line)
 		end
 	end
-	
+
 	-- Remove trailing empty lines from error message
 	while #lines > 0 and (lines[#lines] == ">" or lines[#lines] == "") do
 		table.remove(lines)
 	end
-	
+
 	return lines
 end
 
@@ -69,7 +69,7 @@ end
 function M.show_error(plugin_name, error_message)
 	-- Save error to cache
 	M.save_error(plugin_name, error_message)
-	
+
 	-- Close existing window and buffer if any
 	if M.current_win and api.nvim_win_is_valid(M.current_win) then
 		api.nvim_win_close(M.current_win, true)
@@ -77,7 +77,7 @@ function M.show_error(plugin_name, error_message)
 	if M.current_buf and api.nvim_buf_is_valid(M.current_buf) then
 		api.nvim_buf_delete(M.current_buf, { force = true })
 	end
-	
+
 	-- Check for existing buffer with the same name and delete it
 	for _, buf_id in ipairs(api.nvim_list_bufs()) do
 		if api.nvim_buf_is_valid(buf_id) then
@@ -94,7 +94,7 @@ function M.show_error(plugin_name, error_message)
 			end
 		end
 	end
-	
+
 	-- Format content - show all errors from cache
 	local content_lines = {}
 	for i, err in ipairs(M.error_cache) do
@@ -103,40 +103,40 @@ function M.show_error(plugin_name, error_message)
 			table.insert(content_lines, "---")
 			table.insert(content_lines, "")
 		end
-		
+
 		local plugin_lines = format_error_content(err.plugin, err.error)
 		for _, line in ipairs(plugin_lines) do
 			table.insert(content_lines, line)
 		end
 	end
-	
+
 	-- Remove trailing empty lines (including ">" lines from error formatting)
 	while #content_lines > 0 and (content_lines[#content_lines] == "" or content_lines[#content_lines] == ">") do
 		table.remove(content_lines)
 	end
-	
+
 	-- Calculate window size (same as install/update windows)
 	local width, height = calculate_window_size()
-	
+
 	-- Create buffer
 	local buf = api.nvim_create_buf(false, true)
 	-- Set buffer name
 	api.nvim_buf_set_name(buf, "SynapseError")
-	
+
 	-- Set filetype
 	api.nvim_buf_set_option(buf, "filetype", "markdown")
-	
+
 	-- Enable line wrapping to show full error messages
 	api.nvim_buf_set_option(buf, "wrap", true)
 	api.nvim_buf_set_option(buf, "linebreak", true) -- Break at word boundaries
-	
+
 	-- Set content
 	api.nvim_buf_set_lines(buf, 0, -1, false, content_lines)
-	
+
 	-- Make buffer readonly
 	api.nvim_buf_set_option(buf, "readonly", true)
 	api.nvim_buf_set_option(buf, "modifiable", false)
-	
+
 	-- Create floating window
 	local config = {
 		relative = "editor",
@@ -149,18 +149,18 @@ function M.show_error(plugin_name, error_message)
 		title = " Synapse Error ",
 		title_pos = "center",
 	}
-	
+
 	local win_id = api.nvim_open_win(buf, true, config)
-	
+
 	-- Enable line wrapping in window (must be after window creation)
 	api.nvim_win_set_option(win_id, "wrap", true)
 	api.nvim_win_set_option(win_id, "linebreak", true) -- Break at word boundaries
-	
+
 	-- Set keymaps
 	local opts = { noremap = true, silent = true }
 	api.nvim_buf_set_keymap(buf, "n", "q", "<cmd>lua require('synapse.ui.error').close()<CR>", opts)
 	api.nvim_buf_set_keymap(buf, "n", "<Esc>", "<cmd>lua require('synapse.ui.error').close()<CR>", opts)
-	
+
 	-- Store window reference
 	M.current_win = win_id
 	M.current_buf = buf
@@ -173,12 +173,12 @@ function M.show_all_errors()
 		M.close()
 		return
 	end
-	
+
 	if #M.error_cache == 0 then
 		vim.notify("No errors to display", vim.log.levels.INFO, { title = "Synapse" })
 		return
 	end
-	
+
 	-- Clean up any existing windows and buffers
 	if M.current_win and api.nvim_win_is_valid(M.current_win) then
 		api.nvim_win_close(M.current_win, true)
@@ -186,7 +186,7 @@ function M.show_all_errors()
 	if M.current_buf and api.nvim_buf_is_valid(M.current_buf) then
 		api.nvim_buf_delete(M.current_buf, { force = true })
 	end
-	
+
 	-- Check for existing buffer with the same name and delete it
 	for _, buf_id in ipairs(api.nvim_list_bufs()) do
 		if api.nvim_buf_is_valid(buf_id) then
@@ -203,49 +203,49 @@ function M.show_all_errors()
 			end
 		end
 	end
-	
+
 	local content_lines = {}
-	
+
 	for i, err in ipairs(M.error_cache) do
 		if i > 1 then
 			table.insert(content_lines, "")
 			table.insert(content_lines, "---")
 			table.insert(content_lines, "")
 		end
-		
+
 		local plugin_lines = format_error_content(err.plugin, err.error)
 		for _, line in ipairs(plugin_lines) do
 			table.insert(content_lines, line)
 		end
 	end
-	
+
 	-- Remove trailing empty lines (including ">" lines from error formatting)
 	while #content_lines > 0 and (content_lines[#content_lines] == "" or content_lines[#content_lines] == ">") do
 		table.remove(content_lines)
 	end
-	
+
 	-- Calculate window size (same as install/update windows)
 	local width, height = calculate_window_size()
-	
+
 	-- Create buffer
 	local buf = api.nvim_create_buf(false, true)
 	-- Set buffer name
 	api.nvim_buf_set_name(buf, "SynapseError")
-	
+
 	-- Set filetype
 	api.nvim_buf_set_option(buf, "filetype", "markdown")
-	
+
 	-- Enable line wrapping to show full error messages
 	api.nvim_buf_set_option(buf, "wrap", true)
 	api.nvim_buf_set_option(buf, "linebreak", true) -- Break at word boundaries
-	
+
 	-- Set content
 	api.nvim_buf_set_lines(buf, 0, -1, false, content_lines)
-	
+
 	-- Make buffer readonly
 	api.nvim_buf_set_option(buf, "readonly", true)
 	api.nvim_buf_set_option(buf, "modifiable", false)
-	
+
 	-- Create floating window
 	local config = {
 		relative = "editor",
@@ -258,18 +258,18 @@ function M.show_all_errors()
 		title = " Synapse Error ",
 		title_pos = "center",
 	}
-	
+
 	local win_id = api.nvim_open_win(buf, true, config)
-	
+
 	-- Enable line wrapping in window (must be after window creation)
 	api.nvim_win_set_option(win_id, "wrap", true)
 	api.nvim_win_set_option(win_id, "linebreak", true) -- Break at word boundaries
-	
+
 	-- Set keymaps
 	local opts = { noremap = true, silent = true }
 	api.nvim_buf_set_keymap(buf, "n", "q", "<cmd>lua require('synapse.ui.error').close()<CR>", opts)
 	api.nvim_buf_set_keymap(buf, "n", "<Esc>", "<cmd>lua require('synapse.ui.error').close()<CR>", opts)
-	
+
 	-- Store window reference
 	M.current_win = win_id
 	M.current_buf = buf
@@ -280,11 +280,11 @@ function M.close()
 	if M.current_win and api.nvim_win_is_valid(M.current_win) then
 		api.nvim_win_close(M.current_win, true)
 	end
-	
+
 	if M.current_buf and api.nvim_buf_is_valid(M.current_buf) then
 		api.nvim_buf_delete(M.current_buf, { force = true })
 	end
-	
+
 	M.current_win = nil
 	M.current_buf = nil
 end
@@ -295,4 +295,3 @@ function M.clear_cache()
 end
 
 return M
-

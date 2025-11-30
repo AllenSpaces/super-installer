@@ -41,7 +41,14 @@ function M.write(filepath, data)
 			if plugin.depend and type(plugin.depend) == "table" and #plugin.depend > 0 then
 				table.insert(lines, "    depend:")
 				for _, dep in ipairs(plugin.depend) do
-					table.insert(lines, "      - " .. escape_yaml(dep))
+					-- Support both string and table formats
+					if type(dep) == "string" then
+						table.insert(lines, "      - " .. escape_yaml(dep))
+					elseif type(dep) == "table" and dep[1] then
+						-- Table format: { "user/repo", opt = {...} }
+						-- Only save the repo string in YAML (opt is handled separately)
+						table.insert(lines, "      - " .. escape_yaml(dep[1]))
+					end
 				end
 			end
 		end

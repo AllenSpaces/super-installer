@@ -275,8 +275,17 @@ Basic Format: ~
             "cargo build --release",
         },                                  -- Or use a single string: execute = "make"
         depend = {                          -- Optional: dependency list
+            -- String format (simple dependency)
             "dependency1/repo1",
-            "dependency2/repo2",
+            -- Table format with opt configuration
+            {
+                "dependency2/repo2",
+                opt = {
+                    -- Configuration options for the dependency
+                    key1 = "value1",
+                    key2 = "value2",
+                }
+            },
         },
         config = function()                 -- Optional: plugin config function
             -- Configuration code
@@ -301,12 +310,55 @@ Example 2 - With Dependencies: ~
     return {
         repo = "username/plugin-name",
         depend = {
+            -- String format (simple dependency)
             "username/dependency-plugin",
-            "username/another-dependency",
+            
+            -- Table format with opt configuration
+            {
+                "username/another-dependency",
+                opt = {
+                    -- Configuration options for the dependency
+                    option1 = "value1",
+                    option2 = "value2",
+                }
+            },
         },
         config = function()
             require("plugin-name").setup({})
         end,
+    }
+<
+
+Dependency Configuration with `opt`: ~
+When a dependency has an `opt` field, Synapse will automatically call the
+dependency's `setup()` function with the provided options. This is useful for
+configuring dependencies without creating separate `.config.lua` files.
+
+Important Notes: ~
+    • Dependencies with `opt` are configured **AFTER** all `.config.lua` files
+      are loaded, ensuring main plugins are set up first
+    • The `opt` table is passed directly to the dependency's `setup()`
+      function
+    • If the dependency doesn't have a `setup()` function, a warning will be
+      shown
+    • Plugin name is automatically extracted from the repository path
+    • This ensures proper initialization order (e.g., `mason.nvim` is set up
+      before `mason-lspconfig.nvim`)
+
+Example - Mason with LSP Config: ~
+>
+    -- config_dir/lua/plugins/mason.lua
+    return {
+        repo = "williamboman/mason.nvim",
+        depend = {
+            {
+                "williamboman/mason-lspconfig.nvim",
+                opt = {
+                    ensure_installed = { "lua_ls", "pyright" },
+                    automatic_installation = true,
+                }
+            },
+        },
     }
 <
 
@@ -539,6 +591,40 @@ Synapse automatically handles plugin dependencies:
 3. Priority: If a dependency is also a main plugin, its configuration
    takes precedence
 4. Protection: Dependencies are protected during removal unless unused
+5. Configuration with `opt`: Dependencies can be configured using the `opt`
+   field
+
+Dependency Configuration Formats: ~
+
+String Format (simple dependency): ~
+>
+    depend = {
+        "username/dependency-plugin",
+    }
+<
+
+Table Format (with configuration): ~
+>
+    depend = {
+        {
+            "username/dependency-plugin",
+            opt = {
+                -- Configuration options passed to dependency's setup() function
+                option1 = "value1",
+                option2 = "value2",
+            }
+        },
+    }
+<
+
+Loading Order: ~
+    1. All `.config.lua` files are loaded first (main plugins are set up)
+    2. Then dependencies with `opt` are configured (ensuring proper
+       initialization order)
+
+This ensures that if `plugin-a` depends on `plugin-b`, and both have
+configurations, `plugin-b` will be set up before `plugin-a`'s dependency
+configuration is applied.
 
 Version Management: ~
     Synapse supports both branch and tag-based version control:
@@ -707,8 +793,31 @@ execute                                         *synapse-config-field-execute*
     installation and update operations.
 
 depend                                          *synapse-config-field-depend*
-    Type: Array of Strings (optional)
-    Description: Dependency list, format: "username/repo-name"
+    Type: Array of Strings or Tables (optional)
+    Description: Dependency list, supports two formats:
+    
+    String Format (simple dependency): ~
+        "username/repo-name"
+    
+    Table Format (with configuration): ~
+        {
+            "username/repo-name",
+            opt = {
+                -- Configuration options passed to dependency's setup() function
+                option1 = "value1",
+                option2 = "value2",
+            }
+        }
+    
+    Notes: ~
+        • Dependencies with `opt` are configured **AFTER** all `.config.lua`
+          files are loaded
+        • The `opt` table is passed directly to the dependency's `setup()`
+          function
+        • This ensures proper initialization order (e.g., `mason.nvim` is set
+          up before `mason-lspconfig.nvim`)
+        • If a dependency doesn't have a `setup()` function, a warning will
+          be shown
 
 config                                          *synapse-config-field-config*
     Type: Function (optional)

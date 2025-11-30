@@ -57,7 +57,43 @@ local function safe_require(module_name, file_path)
 	end
 end
 
+local config_utils = require("synapse.utils.config")
+
 local M = {}
+
+--- Load dependency opt configuration
+--- @param repo string Plugin repository path
+--- @param opt table Configuration table
+local function load_dependency_opt(repo, opt)
+	if not repo or not opt or type(opt) ~= "table" then
+		return
+	end
+	
+	-- Extract plugin name from repo (e.g., "nvim-lua/plenary.nvim" -> "plenary")
+	local plugin_name = repo:match("([^/]+)$")
+	plugin_name = plugin_name:gsub("%.git$", ""):gsub("%.nvim$", ""):gsub("%-nvim$", "")
+	
+	-- Try to require and setup the plugin
+	local ok, plugin = pcall(require, plugin_name)
+	if ok and plugin and plugin.setup then
+		local setup_ok, setup_err = pcall(plugin.setup, opt)
+		if not setup_ok then
+			vim.notify(
+				"Error setting up dependency " .. repo .. ": " .. tostring(setup_err),
+				vim.log.levels.WARN,
+				{ title = "Synapse" }
+			)
+		end
+	elseif not ok then
+		-- Plugin not found, silently skip (it might not be installed yet)
+	elseif plugin and not plugin.setup then
+		vim.notify(
+			"Dependency " .. repo .. " does not have a setup function",
+			vim.log.levels.WARN,
+			{ title = "Synapse" }
+		)
+	end
+end
 
 --- Execute config function for a module
 --- @param module table Module information
@@ -127,7 +163,8 @@ end
 
 --- Load configuration files from config_path
 --- @param config_path string|table Path to scan for .config.lua files
-function M.load_config(config_path)
+--- @param config_files_path string|nil Optional path to scan for plugin config files (for dependency opt loading)
+function M.load_config(config_path, config_files_path)
 	if not config_path then
 		return
 	end
@@ -148,12 +185,29 @@ function M.load_config(config_path)
 	path = vim.fn.fnamemodify(path, ":p")
 	path = path:gsub("/$", "") -- Remove trailing slash
 	
-	-- Scan all .config.lua files in the specified path
+	-- Step 1: Scan and load all .config.lua files first
+	-- This ensures main plugins are set up before their dependencies
 	local config_modules = scan_config_files(path)
 	
-	-- Load all modules
+	-- Load all modules (main plugin configurations)
 	for _, module in ipairs(config_modules) do
 		execute_config(module)
+	end
+	
+	-- Step 2: Load dependency opt configurations from config files
+	-- This happens after main plugins are set up, so dependencies can safely use them
+	if config_files_path then
+		local configs = config_utils.load_config_files(config_files_path)
+		for _, plugin_config in ipairs(configs) do
+			if plugin_config.depend and type(plugin_config.depend) == "table" then
+				for _, dep_item in ipairs(plugin_config.depend) do
+					local dep_repo, dep_opt = config_utils.parse_dependency(dep_item)
+					if dep_repo and dep_opt then
+						load_dependency_opt(dep_repo, dep_opt)
+					end
+				end
+			end
+		end
 	end
 end
 

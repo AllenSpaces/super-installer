@@ -203,8 +203,20 @@ return {
     repo = "username/plugin-name",
     
     -- Dependencies (optional)
+    -- Support both string and table formats
     depend = {
+        -- String format (simple dependency)
         "username/dependency-plugin",
+        
+        -- Table format with opt configuration
+        {
+            "username/another-dependency",
+            opt = {
+                -- Configuration options for the dependency
+                key1 = "value1",
+                key2 = "value2",
+            }
+        },
     },
     
     -- Tag version (optional, takes precedence over branch)
@@ -227,6 +239,19 @@ return {
     end,
 }
 ```
+
+**Dependency Configuration with `opt`**: ~
+
+When a dependency has an `opt` field, Synapse will automatically call the
+dependency's `setup()` function with the provided options. This is useful for
+configuring dependencies without creating separate `.config.lua` files.
+
+**Important Notes**:
+- Dependencies with `opt` are configured **after** all `.config.lua` files are
+  loaded, ensuring main plugins are set up first
+- The `opt` table is passed directly to the dependency's `setup()` function
+- If the dependency doesn't have a `setup()` function, a warning will be shown
+- Plugin name is automatically extracted from the repository path
 
 ### 2. Load Configuration Files (`.config.lua` files)
 
@@ -406,6 +431,39 @@ Synapse automatically handles plugin dependencies:
 2. **Deduplication**: Shared dependencies are installed only once
 3. **Priority**: If a dependency is also a main plugin, its configuration takes precedence
 4. **Protection**: Dependencies are protected during removal unless unused
+5. **Configuration with `opt`**: Dependencies can be configured using the `opt` field
+
+### Dependency Configuration Formats
+
+Dependencies support two formats:
+
+**String Format** (simple dependency):
+```lua
+depend = {
+    "username/dependency-plugin",
+}
+```
+
+**Table Format** (with configuration):
+```lua
+depend = {
+    {
+        "username/dependency-plugin",
+        opt = {
+            -- Configuration options passed to dependency's setup() function
+            option1 = "value1",
+            option2 = "value2",
+        }
+    },
+}
+```
+
+**Loading Order**:
+1. All `.config.lua` files are loaded first (main plugins are set up)
+2. Then dependencies with `opt` are configured (ensuring proper initialization order)
+
+This ensures that if `plugin-a` depends on `plugin-b`, and both have configurations,
+`plugin-b` will be set up before `plugin-a`'s dependency configuration is applied.
 
 ## Version Management
 
@@ -479,14 +537,55 @@ require("synapse").setup({
 return {
     repo = "username/plugin-name",
     depend = {
+        -- String format (simple dependency)
         "username/dependency-plugin",
-        "username/another-dependency",
+        
+        -- Table format with opt configuration
+        {
+            "username/another-dependency",
+            opt = {
+                -- Configuration for the dependency
+                option1 = "value1",
+                option2 = "value2",
+            }
+        },
     },
     config = function()
         require("plugin-name").setup({})
     end,
 }
 ```
+
+**Note**: Dependencies with `opt` configuration are automatically set up after
+all `.config.lua` files are loaded, ensuring proper initialization order.
+
+### Plugin with Dependency Configuration (opt)
+
+```lua
+-- config_dir/lua/plugins/mason.lua
+return {
+    repo = "williamboman/mason.nvim",
+    depend = {
+        {
+            "williamboman/mason-lspconfig.nvim",
+            opt = {
+                ensure_installed = { "lua_ls", "pyright", "rust_analyzer" },
+                automatic_installation = true,
+            }
+        },
+    },
+}
+```
+
+**How it works**:
+1. `mason.nvim` is installed as the main plugin
+2. `mason-lspconfig.nvim` is installed as a dependency
+3. When configuration files are loaded:
+   - First, all `.config.lua` files are loaded (including `mason.nvim` setup if configured)
+   - Then, dependencies with `opt` are configured (e.g., `mason-lspconfig.nvim.setup(opt)`)
+
+This ensures `mason.nvim` is set up before `mason-lspconfig.nvim`, preventing
+initialization order errors.
 
 ### Plugin with Tag Version
 
