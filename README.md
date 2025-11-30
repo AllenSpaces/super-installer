@@ -120,7 +120,7 @@ return {
         option2 = "value2",
     },
 }
-
+    
 -- Method 2: config as function (manual setup)
 return {
     repo = "username/plugin-name",

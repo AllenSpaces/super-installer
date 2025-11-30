@@ -223,6 +223,11 @@ function M.start(config)
 		local installed_count = 0
 		local completed = 0
 
+		-- 初始化进度显示为 0
+		vim.schedule(function()
+			ui.update_progress(progress_win, nil, 0, total, config.opts.ui)
+		end)
+
 		local function finalize()
 			if not installation_active then
 				return
@@ -256,47 +261,75 @@ function M.start(config)
 			end
 		end
 
-		local function process_next(index)
+		-- 并发执行器：最多同时执行10个任务
+		local MAX_CONCURRENT = 10
+		local pending_queue = {}
+		local running_count = 0
+
+		-- 初始化待执行队列
+		for i = 1, #queue do
+			table.insert(pending_queue, i)
+		end
+
+		local function start_next_task()
 			if not installation_active then
 				return
 			end
 
-			if index > total then
+			-- 如果队列为空且没有正在运行的任务，完成
+			if #pending_queue == 0 and running_count == 0 then
 				finalize()
 				return
 			end
 
-			local plugin_config = queue[index]
+			-- 如果正在运行的任务达到上限或队列为空，等待
+			if running_count >= MAX_CONCURRENT or #pending_queue == 0 then
+				return
+			end
+
+			-- 从队列中取出一个任务
+			local queue_index = table.remove(pending_queue, 1)
+			local plugin_config = queue[queue_index]
 			local plugin_name = string_utils.get_plugin_name(plugin_config.repo)
-			-- Check if this is a main plugin
 			local is_main_plugin = main_plugin_repos[plugin_config.repo] == true
 
-			ui.update_progress(progress_win, { plugin = plugin_name, status = "active" }, completed, total, config.opts.ui)
+			running_count = running_count + 1
+			vim.schedule(function()
+				ui.update_progress(progress_win, { plugin = plugin_name, status = "active" }, completed, total, config.opts.ui)
+			end)
 
 			M.install_plugin(plugin_config, config.method, config.opts.package_path, is_main_plugin, function(success, err)
+				running_count = running_count - 1
 				completed = completed + 1
+
 				if success then
 					installed_count = installed_count + 1
 				else
 					table.insert(errors, { plugin = plugin_name, error = err })
 					table.insert(failed_list, plugin_name)
-					-- Save error to cache (don't show window automatically)
 					error_ui.save_error(plugin_name, err or "Installation failed")
 				end
 
-				ui.update_progress(
-					progress_win,
-					{ plugin = plugin_name, status = success and "done" or "failed" },
-					completed,
-					total,
-					config.opts.ui
-				)
+				-- 立即更新进度条
+				vim.schedule(function()
+					ui.update_progress(
+						progress_win,
+						{ plugin = plugin_name, status = success and "done" or "failed" },
+						completed,
+						total,
+						config.opts.ui
+					)
+				end)
 
-				process_next(index + 1)
+				-- 尝试启动下一个任务
+				start_next_task()
 			end)
 		end
 
-		process_next(1)
+		-- 启动初始任务（最多5个）
+		for i = 1, math.min(MAX_CONCURRENT, #pending_queue) do
+			start_next_task()
+		end
 	end
 
 	run_install_queue(pending_install)

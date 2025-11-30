@@ -45,9 +45,9 @@ function M.start(config)
 				for _, dep_item in ipairs(plugin_config.depend) do
 					local dep_repo = parse_dependency(dep_item)
 					if dep_repo then
-						local dep_name = dep_repo:match("([^/]+)$")
-						dep_name = dep_name:gsub("%.git$", "")
-						required_plugins[dep_name] = true
+					local dep_name = dep_repo:match("([^/]+)$")
+					dep_name = dep_name:gsub("%.git$", "")
+					required_plugins[dep_name] = true
 					end
 				end
 			end
@@ -92,6 +92,11 @@ function M.start(config)
 					cleanup_active = false
 				end,
 			})
+
+			-- 初始化进度显示为 0
+			vim.schedule(function()
+				ui.update_progress(progress_win, nil, 0, #queue, config.opts.ui)
+			end)
 		end
 
 		local total = #queue
@@ -131,47 +136,77 @@ function M.start(config)
 			end
 		end
 
-		local function process_next(index)
+		-- 并发执行器：最多同时执行10个任务
+		local MAX_CONCURRENT = 10
+		local pending_queue = {}
+		local running_count = 0
+
+		-- 初始化待执行队列
+		for i = 1, #queue do
+			table.insert(pending_queue, i)
+		end
+
+		local function start_next_removal()
 			if not cleanup_active then
 				return
 			end
 
-			if index > total then
+			-- 如果队列为空且没有正在运行的任务，完成
+			if #pending_queue == 0 and running_count == 0 then
 				finalize()
 				return
 			end
 
-			local plugin = queue[index]
+			-- 如果正在运行的任务达到上限或队列为空，等待
+			if running_count >= MAX_CONCURRENT or #pending_queue == 0 then
+				return
+			end
+
+			-- 从队列中取出一个任务
+			local queue_index = table.remove(pending_queue, 1)
+			local plugin = queue[queue_index]
+
+			running_count = running_count + 1
 			if progress_win then
-				ui.update_progress(progress_win, { plugin = plugin, status = "active" }, completed, total, config.opts.ui)
+				vim.schedule(function()
+					ui.update_progress(progress_win, { plugin = plugin, status = "active" }, completed, total, config.opts.ui)
+				end)
 			end
 
 			M.remove_plugin(plugin, config.opts.package_path, function(success, err)
+				running_count = running_count - 1
 				completed = completed + 1
+
 				if success then
 					removed_count = removed_count + 1
 				else
 					table.insert(errors, { plugin = plugin, error = err or "Removal failed" })
 					table.insert(failed_list, plugin)
-					-- Save error to cache (don't show window automatically)
 					error_ui.save_error(plugin, err or "Removal failed")
 				end
 
+				-- 立即更新进度条
 				if progress_win then
-					ui.update_progress(
-						progress_win,
-						{ plugin = plugin, status = success and "done" or "failed" },
-						completed,
-						total,
-						config.opts.ui
-					)
+					vim.schedule(function()
+						ui.update_progress(
+							progress_win,
+							{ plugin = plugin, status = success and "done" or "failed" },
+							completed,
+							total,
+							config.opts.ui
+						)
+					end)
 				end
 
-				process_next(index + 1)
+				-- 尝试启动下一个任务
+				start_next_removal()
 			end)
 		end
 
-		process_next(1)
+		-- 启动初始任务（最多5个）
+		for i = 1, math.min(MAX_CONCURRENT, #pending_queue) do
+			start_next_removal()
+		end
 	end
 
 	run_removal_queue(removal_candidates)

@@ -90,7 +90,7 @@ CONFIGURATION                                            *synapse-configuration*
 4.1 Custom Plugin Installation Directory ~
 
 You can specify a custom directory for plugin installation:
-
+        
 >
     require("synapse").setup({
         opts = {
