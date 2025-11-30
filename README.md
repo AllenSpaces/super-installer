@@ -131,6 +131,7 @@ return {
 - `:SynapseDownload` - Install missing plugins
 - `:SynapseUpgrade` - Update all plugins
 - `:SynapseRemove` - Remove unused plugins
+- `:SynapseError` - View error messages from failed operations (toggle window)
 
 ### Keymaps (default)
 
@@ -153,6 +154,26 @@ return {
 
 - `q` or `Esc` - Close window
 - `R` - Retry failed operations (when viewing failures)
+
+### Error Window
+
+When operations fail, error information is automatically saved. Use `:SynapseError` to view all error messages:
+
+- **Format**: Errors are displayed in Markdown format
+  - Plugin name as level 1 heading (`# PluginName`)
+  - Error message using error admonition syntax (`> [!ERROR]`)
+- **Window**: 
+  - Same size as install/update windows (70% width, 60% height)
+  - Title: " Synapse Error " (centered)
+  - Buffer name: `SynapseError`
+  - Filetype: `markdown` (for syntax highlighting)
+- **Features**:
+  - Automatically wraps long error messages
+  - Removes trailing empty lines
+  - Toggle with `:SynapseError` command (opens if closed, closes if open)
+  - Errors are cleared when retrying operations (press `R` to retry)
+- **Controls**:
+  - `q` or `Esc` - Close error window
 ```
 
 ## Configuration Options
@@ -446,7 +467,16 @@ require('synapse').setup({
 - Verify the command syntax is correct
 - Check file permissions in the plugin directory
 - Review error messages in the UI for specific command failures
+- Use `:SynapseError` command to view detailed error messages
 - Some commands may require additional environment variables or PATH settings
+
+### Viewing Error Messages
+
+- Use `:SynapseError` command to view all error messages from failed operations
+- Error messages are displayed in Markdown format with full content (no truncation)
+- Errors are automatically saved when operations fail
+- Error cache is cleared when retrying operations (press `R` in the progress window)
+- Error window can be toggled with `:SynapseError` command
 
 ## Contributing
 

@@ -233,6 +233,7 @@ Commands: ~
     :SynapseDownload    Install missing plugins
     :SynapseUpgrade     Update all plugins
     :SynapseRemove      Remove unused plugins
+    :SynapseError       View error messages from failed operations (toggle window)
 
 Keymaps (default): ~
     <leader>si          Install plugins
@@ -256,6 +257,33 @@ Progress Window: ~
 Window Controls: ~
     q or <Esc>          Close window
     Shift+R             Retry failed operations (when viewing failures)
+
+Error Window: ~
+    When operations fail, error information is automatically saved. Use
+    :SynapseError to view all error messages.
+    
+    Format: ~
+        Errors are displayed in Markdown format:
+        • Plugin name as level 1 heading (# PluginName)
+        • Error message using error admonition syntax (> [!ERROR])
+        • Full error content is shown (no truncation)
+        • Trailing empty lines are automatically removed
+    
+    Window Features: ~
+        • Same size as install/update windows (70% width, 60% height)
+        • Title: " Synapse Error " (centered)
+        • Buffer name: SynapseError
+        • Filetype: markdown (for syntax highlighting)
+        • Automatically wraps long error messages
+        • Toggle with :SynapseError command (opens if closed, closes if open)
+    
+    Error Cache: ~
+        • Errors are automatically saved when operations fail
+        • Error cache is cleared when retrying operations (press R to retry)
+        • Only errors from the current operation session are shown
+    
+    Controls: ~
+        q or <Esc>      Close error window
 
 The UI automatically:
     • Removes completed/failed plugins from the list
