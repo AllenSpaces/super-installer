@@ -2,46 +2,108 @@
 
 A modern, lightweight plugin manager for Neovim with a beautiful UI and intelligent dependency management.
 
-![Example](gif/Example.gif)
-
 ## Features
 
 - 📦 **Configuration-based Management**: Manage plugins through simple Lua configuration files
 - 🔗 **Automatic Dependency Resolution**: Automatically install, update, and protect plugin dependencies
-- 🌿 **Branch Support**: Clone specific branches for each plugin
+- 🌿 **Branch & Tag Support**: Clone specific branches or lock to tag versions
 - 🎨 **Beautiful UI**: Real-time progress display with customizable ASCII art headers
 - ⚡ **Smart Updates**: Check for updates before applying them
 - 🧹 **Auto Cleanup**: Remove unused plugins automatically
+- 🔧 **Post-Install Commands**: Execute build commands after installation/update
 
 ## Installation
 
+### Step 1: Clone Synapse.nvim
+
+Choose your preferred installation location:
+
+**Option 1: Custom Package Directory**
 ```bash
-git clone https://github.com/OriginCoderPulse/synapse.nvim ~/.local/site/package/pack/synapse.nvim
+# Create your package directory (choose any location you prefer)
+mkdir -p ~/your-package-directory
+
+# Clone synapse.nvim
+git clone https://github.com/OriginCoderPulse/synapse.nvim ~/your-package-directory/synapse.nvim
 ```
 
-## Quick Start
+**Option 2: Neovim Data Directory**
+```bash
+# Use Neovim's standard data directory
+git clone https://github.com/OriginCoderPulse/synapse.nvim \
+    "$(nvim --cmd 'echo stdpath("data")' --cmd 'qa')/site/pack/synapse.nvim"
+```
 
-Add to your Neovim configuration:
+### Step 2: Configure Runtimepath in init.lua
+
+**Important**: If you use a custom package directory, you must add it to `runtimepath` in your `init.lua` **before** requiring synapse.nvim.
 
 ```lua
-require('synapse').setup({})
+-- Get Neovim's standard paths
+local config_dir = vim.fn.stdpath("config")  -- ~/.config/nvim (Unix) or ~/AppData/Local/nvim (Windows)
+local data_dir = vim.fn.stdpath("data")      -- ~/.local/share/nvim (Unix) or ~/AppData/Local/nvim-data (Windows)
+
+-- Option 1: Use custom package directory
+local package_dir = vim.fn.expand("~/your-package-directory")
+
+-- Add package directory to runtimepath
+vim.opt.runtimepath:append(package_dir .. "/*")
+vim.opt.runtimepath:append(package_dir .. "/*/after")
+
+-- Option 2: Use Neovim's data directory (no need to set runtimepath)
+-- local package_dir = data_dir .. "/site/pack/packer/start"
+
+-- Require and setup synapse.nvim
+require("synapse").setup({
+    method = "https",  -- or "ssh"
+    opts = {
+        -- Plugin installation directory (must match runtimepath if using custom directory)
+        package_path = package_dir,
+        
+        -- Configuration directory (scanned recursively for .lua files)
+        -- Used for plugin installation/update configuration
+        config_path = config_dir .. "/lua/plugins",
+        
+        -- Load configuration directory (scanned recursively for .config.lua files)
+        -- Used for loading plugin configuration functions
+        load_config = config_dir .. "/lua",
+        
+        -- UI customization
+        ui = {
+            style = "float",
+        },
+    },
+    keys = {
+        download = "<leader>i",
+        remove = "<leader>r",
+        upgrade = "<leader>u",
+    },
+})
 ```
+
+**Note**: The order matters! You must set `runtimepath` **before** calling `require("synapse").setup()`.
 
 ## Configuration
 
 ### Basic Setup
 
 ```lua
-require('synapse').setup({
+local config_dir = vim.fn.stdpath("config")
+local data_dir = vim.fn.stdpath("data")
+
+require("synapse").setup({
     -- Git clone method: "ssh" or "https"
     method = "https",
-
+    
     opts = {
         -- Plugin installation directory
-        package_path = "your pkg path",
+        package_path = data_dir .. "/site/pack/packer/start",
         
         -- Configuration directory (scanned recursively for .lua files)
-        config_path = "your config path",
+        config_path = config_dir .. "/lua/plugins",
+        
+        -- Load configuration directory (scanned recursively for .config.lua files)
+        load_config = config_dir .. "/lua",
         
         -- UI customization
         ui = {
@@ -55,23 +117,23 @@ require('synapse').setup({
                     "███████║   ██║   ██║ ╚████║██║  ██║██║     ███████║███████╗",
                     "╚══════╝   ╚═╝   ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝     ╚══════╝╚══════╝",
                 },
-                hl = "SynapseHeader",  -- or use hex color: "#e6d5fb"
+                hl = "SynapseHeader",  -- or hex color: "#e6d5fb"
             },
             plug = {
-                hl = "SynapsePlugin",  -- or use hex color: "#d5fbd9"
+                hl = "SynapsePlugin",  -- or hex color: "#d5fbd9"
             },
             icons = {
-                download = { glyph = "", hl = "SynapseDownload" },  -- or "#fbe4d5"
+                download = { glyph = "", hl = "SynapseDownload" },
                 upgrade = { glyph = "󰚰", hl = "SynapseUpgrade" },
                 remove = { glyph = "󰺝", hl = "SynapseRemove" },
                 check = { glyph = "󱥾", hl = "SynapseCheck" },
-                success = { glyph = "", hl = "SynapseSuccess" },  -- or "#bbc0ed"
-                faild = { glyph = "󰬌", hl = "SynapseFaild" },  -- or "#edbbbb"
+                success = { glyph = "", hl = "SynapseSuccess" },
+                faild = { glyph = "󰬌", hl = "SynapseFaild" },
                 progress = {
                     glyph = "",
                     hl = {
-                        default = "SynapseProgressDefault",  -- or "#5c6370"
-                        progress = "SynapseProgress",  -- or "#fbe4d5"
+                        default = "SynapseProgressDefault",
+                        progress = "SynapseProgress",
                     },
                 },
             },
@@ -86,23 +148,69 @@ require('synapse').setup({
 })
 ```
 
-### Plugin Configuration Files
+### Custom Package Directory Setup
 
-Create `.lua` files in your `config_path` directory (supports subdirectories):
+If you want to use a custom package directory:
+
+1. **Create the directory**:
+```bash
+mkdir -p ~/your-custom-packages
+```
+
+2. **Add to runtimepath in init.lua** (before requiring synapse):
+```lua
+local package_dir = vim.fn.expand("~/your-custom-packages")
+
+-- Add custom package directory to runtimepath
+vim.opt.runtimepath:append(package_dir .. "/*")
+vim.opt.runtimepath:append(package_dir .. "/*/after")
+```
+
+3. **Configure synapse with matching package_path**:
+```lua
+require("synapse").setup({
+    opts = {
+        package_path = package_dir,
+        -- ... other options
+    },
+})
+```
+
+**Important Notes**:
+- `runtimepath` must be set **before** `require("synapse").setup()`
+- The `package_path` in synapse config must match the directory in `runtimepath`
+- Use `/*` pattern in runtimepath to include all subdirectories
+- Use `/*/after` pattern to include `after` directories for plugins
+
+## Plugin Configuration Files
+
+Synapse uses two types of configuration files:
+
+### 1. Installation Configuration Files (`.lua` files in `config_path`)
+
+These files define which plugins to install, their dependencies, versions, and post-install commands.
+
+**Location**: `config_path` directory (recursively scanned)
+
+**Example**: `config_dir/lua/plugins/example.lua`
 
 ```lua
--- ~/.config/nvim/plugins/telescope.lua
 return {
     -- Repository URL (required)
-    repo = "nvim-telescope/telescope.nvim",
+    repo = "username/plugin-name",
     
-    -- Clone configuration (optional)
-    clone_conf = {
-        branch = "main",  -- Default: "main"
+    -- Dependencies (optional)
+    depend = {
+        "username/dependency-plugin",
     },
     
     -- Tag version (optional, takes precedence over branch)
-    tag = "v0.1.0",  -- Lock to specific tag version
+    tag = "v1.0.0",
+    
+    -- Branch (optional, only if no tag specified)
+    clone_conf = {
+        branch = "main",
+    },
     
     -- Post-install/update commands (optional)
     execute = {
@@ -110,16 +218,58 @@ return {
         "cargo build --release",
     },  -- Or use a single string: execute = "make"
     
-    -- Dependencies (optional)
-    depend = {
-        "nvim-lua/plenary.nvim",
-    },
-    
     -- Plugin configuration function (optional)
     config = function()
-        require("telescope").setup({
+        require("plugin-name").setup({})
+    end,
+}
+```
+
+### 2. Load Configuration Files (`.config.lua` files in `load_config`)
+
+These files contain plugin configuration functions that are executed when Neovim starts.
+
+**Location**: `load_config` directory (recursively scanned)
+
+**Example**: `config_dir/lua/plugins/example.config.lua`
+
+```lua
+return {
+    config = function()
+        local status, plugin = pcall(require, "plugin-name")
+        if not status then
+            vim.notify("plugin-name is not found ...", vim.log.levels.ERROR, { title = "Nvim" })
+            return
+        end
+        plugin.setup({
             -- Your configuration
         })
+    end,
+}
+```
+
+**Lazy Loading**: You can defer configuration loading:
+
+```lua
+-- Load on specific event
+return {
+    loaded = {
+        event = { "BufEnter", "BufWinEnter" },
+    },
+    config = function()
+        -- Configuration code
+    end,
+}
+```
+
+```lua
+-- Load on specific file type
+return {
+    loaded = {
+        ft = { "python", "lua" },
+    },
+    config = function()
+        -- Configuration code
     end,
 }
 ```
@@ -139,9 +289,50 @@ return {
 - `<leader>sr` - Remove unused plugins
 - `<leader>su` - Update plugins
 
-## UI Features
+## Configuration Options
 
-![Example](gif/Example.gif)
+### `method`
+
+- **Type**: `string`
+- **Default**: `"https"`
+- **Values**: `"ssh"` or `"https"`
+- **Description**: Git clone protocol
+
+### `opts.package_path`
+
+- **Type**: `string`
+- **Default**: `vim.fn.stdpath("data") .. "/site/pack/packer/start"`
+- **Description**: Directory where plugins are installed. Must match the directory added to `runtimepath` if using a custom location.
+
+### `opts.config_path`
+
+- **Type**: `string`
+- **Default**: `vim.fn.stdpath("config") .. "/lua/plugins"`
+- **Description**: Directory to scan for plugin installation configuration files (recursive). Scans for all `.lua` files that define plugin repositories, dependencies, tags, and execute commands.
+
+### `opts.load_config`
+
+- **Type**: `string`
+- **Default**: `vim.fn.stdpath("config") .. "/lua"`
+- **Description**: Directory to scan for plugin load configuration files (recursive). Scans for all `.config.lua` files that contain plugin configuration functions. These files are loaded when Neovim starts and execute the `config()` function to set up plugins.
+
+### `opts.ui`
+
+- **Type**: `table`
+- **Description**: UI customization options
+
+See the [UI Features](#ui-features) section for details.
+
+### `keys`
+
+- **Type**: `table`
+- **Description**: Keymap configuration
+- **Fields**:
+  - `download`: Install plugin keymap (default: `<leader>si`)
+  - `remove`: Remove plugin keymap (default: `<leader>sr`)
+  - `upgrade`: Update plugin keymap (default: `<leader>su`)
+
+## UI Features
 
 ### Progress Window
 
@@ -174,62 +365,6 @@ When operations fail, error information is automatically saved. Use `:SynapseErr
   - Errors are cleared when retrying operations (press `R` to retry)
 - **Controls**:
   - `q` or `Esc` - Close error window
-```
-
-## Configuration Options
-
-### `method`
-
-- **Type**: `string`
-- **Default**: `"https"`
-- **Values**: `"ssh"` or `"https"`
-- **Description**: Git clone protocol
-
-### `opts.default`
-
-- **Type**: `string`
-- **Default**: `"OriginCoderPulse/synapse.nvim"`
-- **Description**: Default plugin repository
-
-### `opts.package_path`
-
-- **Type**: `string`
-- **Default**: `~/.synapse/package`
-- **Description**: Directory where plugins are installed
-
-### `opts.config_path`
-
-- **Type**: `string`
-- **Default**: `~/.config/nvim`
-- **Description**: Directory to scan for plugin configuration files (recursive)
-
-### `opts.ui`
-
-- **Type**: `table`
-- **Description**: UI customization options
-
-#### `opts.ui.header`
-
-- **Type**: `table`
-- **Fields**:
-  - `text`: Array of strings for multi-line ASCII art header
-  - `hl`: Highlight group name or hex color (e.g., `"SynapseHeader"` or `"#e6d5fb"`)
-
-#### `opts.ui.plug`
-
-- **Type**: `table`
-- **Fields**:
-  - `hl`: Highlight group name or hex color for plugin names (e.g., `"SynapsePlugin"` or `"#d5fbd9"`)
-
-#### `opts.ui.icons`
-
-- **Type**: `table`
-- **Description**: Icon definitions for different operations
-- **Fields for each icon**:
-  - `glyph`: Icon character (string)
-  - `hl`: Highlight group name or hex color (e.g., `"SynapseDownload"` or `"#fbe4d5"`)
-
-**Note**: All `hl` parameters support both highlight group names (strings) and hex color values (e.g., `"#bbc0ed"`). When a hex color is provided, a highlight group is automatically created.
 
 ## Dependency Management
 
@@ -250,7 +385,7 @@ Synapse supports both branch and tag-based version control:
   - Updates will respect tag changes in configuration
 
 - **Branch Support**: Use `clone_conf.branch` to specify a branch
-  - Default branch is "main" if not specified
+  - Default branch is used if not specified
   - Branch information is saved to `synapse.yaml` (only if not "main" or "master")
 
 - **synapse.yaml**: Automatically created in `package_path` directory
@@ -266,45 +401,52 @@ Synapse supports both branch and tag-based version control:
 
 ## Examples
 
-### Basic Plugin
+### Complete Setup Example
 
 ```lua
--- ~/.config/nvim/plugins/mason.lua
-return {
-    repo = "williamboman/mason.nvim",
-    config = function()
-        require("mason").setup()
-    end,
-}
+-- Get Neovim's standard paths
+local config_dir = vim.fn.stdpath("config")
+local data_dir = vim.fn.stdpath("data")
+
+-- Option 1: Use custom package directory
+local package_dir = vim.fn.expand("~/your-package-directory")
+vim.opt.runtimepath:append(package_dir .. "/*")
+vim.opt.runtimepath:append(package_dir .. "/*/after")
+
+-- Option 2: Use Neovim's data directory (no runtimepath setup needed)
+-- local package_dir = data_dir .. "/site/pack/packer/start"
+
+-- Setup synapse.nvim
+require("synapse").setup({
+    method = "https",
+    opts = {
+        package_path = package_dir,
+        config_path = config_dir .. "/lua/plugins",
+        load_config = config_dir .. "/lua",
+        ui = {
+            style = "float",
+        },
+    },
+    keys = {
+        download = "<leader>i",
+        remove = "<leader>r",
+        upgrade = "<leader>u",
+    },
+})
 ```
 
 ### Plugin with Dependencies
 
 ```lua
--- ~/.config/nvim/plugins/telescope.lua
+-- config_dir/lua/plugins/example.lua
 return {
-    repo = "nvim-telescope/telescope.nvim",
+    repo = "username/plugin-name",
     depend = {
-        "nvim-lua/plenary.nvim",
-        "nvim-telescope/telescope-live-grep-args.nvim",
+        "username/dependency-plugin",
+        "username/another-dependency",
     },
     config = function()
-        require("telescope").setup({})
-    end,
-}
-```
-
-### Plugin with Custom Branch
-
-```lua
--- ~/.config/nvim/plugins/custom.lua
-return {
-    repo = "username/repo-name",
-    clone_conf = {
-        branch = "develop",
-    },
-    config = function()
-        -- Your config
+        require("plugin-name").setup({})
     end,
 }
 ```
@@ -312,136 +454,48 @@ return {
 ### Plugin with Tag Version
 
 ```lua
--- ~/.config/nvim/plugins/versioned.lua
+-- config_dir/lua/plugins/versioned.lua
 return {
-    repo = "username/repo-name",
+    repo = "username/plugin-name",
     tag = "v1.2.3",  -- Lock to specific tag version
     config = function()
-        -- Your config
+        require("plugin-name").setup({})
     end,
 }
 ```
 
-**Note**: When `tag` is specified, it takes precedence over `branch`. The plugin will be checked out to the specified tag version, and this tag will be recorded in `synapse.yaml` for future reference.
-
 ### Plugin with Post-Install Commands
 
 ```lua
--- ~/.config/nvim/plugins/compiled.lua
+-- config_dir/lua/plugins/compiled.lua
 return {
     repo = "username/compiled-plugin",
     execute = {
         "make",
         "cargo build --release",
-    },  -- Commands executed sequentially after installation/update
+    },
     config = function()
-        -- Your config
+        require("compiled-plugin").setup({})
     end,
 }
-```
-
-Or use a single command:
-
-```lua
-return {
-    repo = "username/compiled-plugin",
-    execute = "make",  -- Single command
-    config = function()
-        -- Your config
-    end,
-}
-```
-
-**Note**: The `execute` field supports both a single string or an array of strings. Commands are executed sequentially in the plugin's installation directory. If any command fails, the installation/update process will stop and report an error.
-
-**Common Use Cases**:
-- **Compiled plugins**: Use `make`, `cargo build`, `npm install`, etc.
-- **Language servers**: Build and install language servers
-- **Native extensions**: Compile native components
-- **Post-install setup**: Run setup scripts or install dependencies
-
-**Examples**:
-```lua
--- C/C++ plugin with make
-execute = "make"
-
--- Rust plugin with cargo
-execute = "cargo build --release"
-
--- Node.js plugin
-execute = "npm install"
-
--- Multiple build steps
-execute = {
-    "cmake .",
-    "make",
-    "make install",
-}
-
--- Python plugin with pip
-execute = "pip install -e ."
-```
-
-### Custom UI Colors
-
-You can use hex colors directly in `hl` parameters:
-
-```lua
-require('synapse').setup({
-    opts = {
-        ui = {
-            header = {
-                text = { "Your Header" },
-                hl = "#e6d5fb",  -- Use hex color directly
-            },
-            plug = {
-                hl = "#d5fbd9",  -- Plugin name color
-            },
-            icons = {
-                success = {
-                    glyph = "✓",
-                    hl = "#bbc0ed",  -- Success icon color
-                },
-                faild = {
-                    glyph = "✗",
-                    hl = "#edbbbb",  -- Failure icon color
-                },
-                progress = {
-                    glyph = "▸",
-                    hl = {
-                        default = "#5c6370",  -- Default progress color
-                        progress = "#fbe4d5",  -- Active progress color
-                    },
-                },
-            },
-        },
-    },
-})
-```
-
-Or use highlight group names:
-
-```lua
-require('synapse').setup({
-    opts = {
-        ui = {
-            header = {
-                text = { "Your Header" },
-                hl = "SynapseHeader",  -- Use highlight group name
-            },
-            -- ... other config
-        },
-    },
-})
 ```
 
 ## Troubleshooting
 
+### Neovim Opens with Black Screen
+
+If Neovim opens with a black screen, check:
+
+1. **Runtimepath not set**: Ensure `runtimepath` is set **before** requiring synapse
+2. **Package path mismatch**: Verify `package_path` matches the directory in `runtimepath`
+3. **Plugin loading errors**: Check error messages with `:SynapseError` command
+
 ### Plugins Not Recognized
 
-- Ensure configuration files are in `config_path` (supports subdirectories)
+- Ensure installation configuration files (`.lua`) are in `config_path` (supports subdirectories)
 - Check that files return a table with a `repo` field
 - Verify `repo` field is not empty
+- Ensure load configuration files (`.config.lua`) are in `load_config` if you want to auto-load plugin configurations
 
 ### Dependencies Not Installed
 

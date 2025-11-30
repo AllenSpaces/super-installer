@@ -482,9 +482,9 @@ function M.install_plugin(plugin_config, git_config, package_path, is_main_plugi
 				vim.fn.shellescape(target_dir), tag)
 		elseif branch then
 			-- 如果有 branch，更新到指定分支
-			command = string.format("cd %s && git fetch origin && git checkout %s && git pull origin %s", 
+		command = string.format("cd %s && git fetch origin && git checkout %s && git pull origin %s", 
 				vim.fn.shellescape(target_dir), branch, branch)
-		else
+	else
 			-- 没有 branch 和 tag，直接 pull
 			command = string.format("cd %s && git fetch origin && git pull origin", 
 				vim.fn.shellescape(target_dir))

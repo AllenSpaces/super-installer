@@ -8,6 +8,7 @@ M.default = {
 		default = "OriginCoderPulse/synapse.nvim",
 		package_path = os.getenv("HOME") .. "/.synapse/package",
 		config_path = os.getenv("HOME") .. "/.config/nvim",
+		load_config = os.getenv("HOME") .. "/.config/nvim/lua/",
 
 		ui = {
 			style = "float",
