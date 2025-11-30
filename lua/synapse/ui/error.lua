@@ -4,13 +4,13 @@ local M = {
 	error_cache = {}, -- 存储错误信息 { plugin_name, error_message }
 }
 
---- Calculate window size (same as install/update windows)
+--- Calculate window size for error display
 --- @return number width
 --- @return number height
 local function calculate_window_size()
-	-- Use the same size calculation as install/update windows
-	local width = math.max(50, math.floor(vim.o.columns * 0.55))
-	local height = math.max(18, math.floor(vim.o.lines * 0.5))
+	-- Make error window larger to show full error messages
+	local width = math.floor(vim.o.columns * 0.7)
+	local height = math.floor(vim.o.lines * 0.6)
 	return width, height
 end
 
@@ -42,6 +42,11 @@ local function format_error_content(plugin_name, error_message)
 		else
 			table.insert(lines, "> " .. line)
 		end
+	end
+	
+	-- Remove trailing empty lines from error message
+	while #lines > 0 and (lines[#lines] == ">" or lines[#lines] == "") do
+		table.remove(lines)
 	end
 	
 	return lines
@@ -103,6 +108,11 @@ function M.show_error(plugin_name, error_message)
 		for _, line in ipairs(plugin_lines) do
 			table.insert(content_lines, line)
 		end
+	end
+	
+	-- Remove trailing empty lines (including ">" lines from error formatting)
+	while #content_lines > 0 and (content_lines[#content_lines] == "" or content_lines[#content_lines] == ">") do
+		table.remove(content_lines)
 	end
 	
 	-- Calculate window size (same as install/update windows)
@@ -207,6 +217,11 @@ function M.show_all_errors()
 		for _, line in ipairs(plugin_lines) do
 			table.insert(content_lines, line)
 		end
+	end
+	
+	-- Remove trailing empty lines (including ">" lines from error formatting)
+	while #content_lines > 0 and (content_lines[#content_lines] == "" or content_lines[#content_lines] == ">") do
+		table.remove(content_lines)
 	end
 	
 	-- Calculate window size (same as install/update windows)

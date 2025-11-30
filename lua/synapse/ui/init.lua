@@ -157,6 +157,10 @@ function M.retry_failures()
 			table.insert(failed_plugins, name)
 		end
 		
+		-- Clear error cache before retry
+		local error_ui = require("synapse.ui.error")
+		error_ui.clear_cache()
+		
 		-- Reset state for retry
 		state.state.show_failures = false
 		state.state.completed = 0
