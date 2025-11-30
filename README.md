@@ -496,19 +496,10 @@ Synapse supports both branch and tag-based version control:
 ```lua
 -- Get Neovim's standard paths
 local config_dir = vim.fn.stdpath("config")
-local data_dir = vim.fn.stdpath("data")
 
 -- Step 1: Add synapse.nvim to runtimepath (if using custom package directory)
 local package_dir = vim.fn.expand("~/your-package-directory")
 vim.opt.runtimepath:prepend(package_dir .. "/synapse.nvim")
-
--- Or if synapse.nvim is in Neovim's data directory:
--- local package_dir = data_dir .. "/site/pack/packer/start"
-
--- Step 2: Load configuration files BEFORE synapse.setup()
--- This ensures settings like leader key are available when synapse sets up keymaps
-local load_config = require("synapse.core.load")
-load_config.load_config(config_dir .. "/lua")
 
 -- Step 3: Setup synapse.nvim
 require("synapse").setup({
