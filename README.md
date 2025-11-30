@@ -111,7 +111,19 @@ require("synapse").setup({
 **Example**: Create `~/.config/nvim/lua/plugins/example.config.lua`:
 
 ```lua
+-- Method 1: config as table (automatically calls plugin.setup(config))
 return {
+    repo = "username/plugin-name",
+    config = {
+        -- Configuration options will be passed to plugin.setup()
+        option1 = "value1",
+        option2 = "value2",
+    },
+}
+
+-- Method 2: config as function (manual setup)
+return {
+    repo = "username/plugin-name",
     config = function()
         local status, plugin = pcall(require, "plugin-name")
         if not status then
@@ -124,6 +136,11 @@ return {
     end,
 }
 ```
+
+**Note**: When `config` is a table, Synapse will automatically:
+1. Extract the plugin name from the `repo` field
+2. Try to `require` the plugin
+3. Call `plugin.setup(config_table)` if the plugin has a `setup` function
 
 ### 4.3 Plugin Installation Configuration Format
 
@@ -166,10 +183,17 @@ return {
         "cargo build --release",
     },  -- Or use a single string: execute = "make"
     
-    -- Plugin configuration function (optional)
-    config = function()
-        require("plugin-name").setup({})
-    end,
+    -- Plugin configuration (optional)
+    -- Method 1: config as table (automatically calls plugin.setup(config))
+    config = {
+        option1 = "value1",
+        option2 = "value2",
+    },
+    
+    -- Method 2: config as function (manual setup)
+    -- config = function()
+    --     require("plugin-name").setup({})
+    -- end,
 }
 ```
 
@@ -186,6 +210,19 @@ return {
                 ensure_installed = { "lua_ls", "pyright" },
                 automatic_installation = true,
             }
+        },
+    },
+}
+```
+
+```lua
+-- config_path/lualine.lua (using table config)
+return {
+    repo = "nvim-lualine/lualine.nvim",
+    config = {
+        options = {
+            theme = "auto",
+            icons_enabled = true,
         },
     },
 }
