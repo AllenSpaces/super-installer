@@ -64,10 +64,13 @@ Note: Neovim's standard paths can be obtained using: ~
     • Cache: `vim.fn.stdpath("cache")` - ~/.cache/nvim (Unix) or
       ~/AppData/Local/nvim-data/cache (Windows)
 
-Step 2: Configure Runtimepath in init.lua ~
+Step 2: Configure in init.lua ~
 
-**IMPORTANT**: If you use a custom package directory, you must add it to
-`runtimepath` in your `init.lua` **BEFORE** requiring synapse.nvim.
+**IMPORTANT**: 
+1. Add synapse.nvim to `runtimepath` **BEFORE** requiring it
+2. Load your configuration files **BEFORE** calling `synapse.setup()` if you
+   need settings (like `leader` key) to be available when synapse sets up
+   keymaps
 
 Example: ~
 >
@@ -75,30 +78,28 @@ Example: ~
     local config_dir = vim.fn.stdpath("config")  -- ~/.config/nvim (Unix) or ~/AppData/Local/nvim (Windows)
     local data_dir = vim.fn.stdpath("data")      -- ~/.local/share/nvim (Unix) or ~/AppData/Local/nvim-data (Windows)
     
-    -- Option 1: Use custom package directory
+    -- Step 1: Add synapse.nvim to runtimepath (if using custom package directory)
     local package_dir = vim.fn.expand("~/your-package-directory")
+    vim.opt.runtimepath:prepend(package_dir .. "/synapse.nvim")
     
-    -- Add package directory to runtimepath
-    vim.opt.runtimepath:append(package_dir .. "/*")
-    vim.opt.runtimepath:append(package_dir .. "/*/after")
-    
-    -- Option 2: Use Neovim's data directory (no need to set runtimepath)
+    -- Or if synapse.nvim is in Neovim's data directory, no need to set runtimepath
     -- local package_dir = data_dir .. "/site/pack/packer/start"
     
-    -- Require and setup synapse.nvim
+    -- Step 2: Load your configuration files BEFORE synapse.setup()
+    -- This ensures settings like leader key are available when synapse sets up keymaps
+    local load_config = require("synapse.core.load")
+    load_config.load_config(config_dir .. "/lua")
+    
+    -- Step 3: Setup synapse.nvim
     require("synapse").setup({
         method = "https",  -- or "ssh"
         opts = {
-            -- Plugin installation directory (must match runtimepath if using custom directory)
+            -- Plugin installation directory
             package_path = package_dir,
             
             -- Configuration directory (scanned recursively for .lua files)
             -- Used for plugin installation/update configuration
             config_path = config_dir .. "/lua/plugins",
-            
-            -- Load configuration directory (scanned recursively for .config.lua files)
-            -- Used for loading plugin configuration functions
-            load_config = config_dir .. "/lua",
             
             -- UI customization
             ui = {
@@ -113,8 +114,12 @@ Example: ~
     })
 <
 
-**Note**: The order matters! You must set `runtimepath` **BEFORE** calling
-`require("synapse").setup()`.
+**Note**: 
+    • Load configuration files **BEFORE** `synapse.setup()` if you need
+      settings (like `leader` key) available when keymaps are set up
+    • All `.config.lua` files in the specified path will be loaded and
+      executed immediately (no lazy loading)
+    • The order matters! Load configs → Setup synapse
 
 Custom Package Directory Setup: ~
 
@@ -161,41 +166,32 @@ Complete Setup Example: ~
     local config_dir = vim.fn.stdpath("config")
     local data_dir = vim.fn.stdpath("data")
     
-    -- Option 1: Use custom package directory
+    -- Step 1: Add synapse.nvim to runtimepath (if using custom package directory)
     local package_dir = vim.fn.expand("~/your-package-directory")
-    vim.opt.runtimepath:append(package_dir .. "/*")
-    vim.opt.runtimepath:append(package_dir .. "/*/after")
+    vim.opt.runtimepath:prepend(package_dir .. "/synapse.nvim")
     
-    -- Option 2: Use Neovim's data directory (no runtimepath setup needed)
+    -- Or if synapse.nvim is in Neovim's data directory:
     -- local package_dir = data_dir .. "/site/pack/packer/start"
     
-    -- Setup synapse.nvim
+    -- Step 2: Load configuration files BEFORE synapse.setup()
+    -- This ensures settings like leader key are available when synapse sets up keymaps
+    local load_config = require("synapse.core.load")
+    load_config.load_config(config_dir .. "/lua")
+    
+    -- Step 3: Setup synapse.nvim
     require('synapse').setup({
         -- Git clone method: "ssh" or "https"
         method = "https",
         
         opts = {
-            -- Plugin installation directory (must match runtimepath if using custom directory)
+            -- Plugin installation directory
             package_path = package_dir,
             
             -- Configuration directory (scanned recursively for .lua files)
             config_path = config_dir .. "/lua/plugins",
             
-            -- Load configuration directory (scanned recursively for .config.lua files)
-            -- Can be a string path or a table with path and first fields
-            load_config = {
-                path = config_dir .. "/lua",
-                -- Optional: List of config files to load before synapse.setup()
-                -- These configs are executed immediately (no lazy loading)
-                -- Useful for setting leader key, basic options, etc.
-                first = {
-                    "custom.config",      -- Load configs/custom.config.lua first
-                    "commands.config",    -- Then load configs/commands.config.lua
-                    "keymaps.config",     -- Then load configs/keymaps.config.lua
-                },
-            },
-            -- Or use simple string format:
-            -- load_config = config_dir .. "/lua",
+            -- Note: load_config is no longer used in synapse.setup()
+            -- Load your .config.lua files manually BEFORE synapse.setup() if needed
             
             -- UI customization
             ui = {
@@ -240,6 +236,10 @@ Complete Setup Example: ~
     })
 <
 
+**Note**: Loading configs **BEFORE** `synapse.setup()` ensures that
+`custom.config` (which sets `leader` key) is executed before synapse sets up
+keymaps, so the keymaps can use `<leader>` correctly.
+
 ==============================================================================
 PLUGIN CONFIGURATION FORMAT                        *synapse-config-format*
 ==============================================================================
@@ -251,9 +251,10 @@ Synapse uses two types of configuration files:
    - Scanned recursively from `config_path`
    - Must return a table with `repo` field
 
-2. Load Configuration Files (`.config.lua` files in `load_config`):
+2. Load Configuration Files (`.config.lua` files):
    - Used for loading plugin configuration functions
-   - Scanned recursively from `load_config`
+   - Should be loaded manually **BEFORE** `synapse.setup()` if you need
+     settings (like `leader` key) to be available
    - Executes `config()` function when plugin is loaded
    - Supports lazy loading with `loaded` field
 
@@ -371,44 +372,49 @@ directory. If any command fails, the installation/update process will stop
 and report an error.
 
 Load Configuration Files: ~
-Create `.config.lua` files in your `load_config` directory (supports
-subdirectories) to automatically load plugin configurations when Neovim
-starts.
+Create `.config.lua` files in your Neovim config directory (e.g.,
+`~/.config/nvim/lua/`) to load plugin configurations. You should load them
+**BEFORE** `synapse.setup()` if you need settings (like `leader` key) to be
+available when synapse sets up keymaps.
 
-Priority Loading with `first` field: ~
-You can specify which configs should be loaded before `synapse.setup()` by
-using the `first` field:
-
+Loading in init.lua: ~
 >
+    -- Load configuration files BEFORE synapse.setup()
+    local load_config = require("synapse.core.load")
+    load_config.load_config(vim.fn.stdpath("config") .. "/lua")
+    
+    -- Now setup synapse (leader key is already set)
     require("synapse").setup({
-        opts = {
-            load_config = {
-                path = vim.fn.stdpath("config") .. "/lua",
-                first = {
-                    "custom.config",      -- Load first (e.g., sets leader key)
-                    "commands.config",    -- Load second
-                    "keymaps.config",     -- Load third
-                },
-            },
-        },
+        -- ... your config
     })
 <
 
 Important Notes: ~
-    • Configs in `first` list are loaded **BEFORE** `synapse.setup()` executes
-    • They are executed **IMMEDIATELY** (even if they have `loaded` field for
-      lazy loading)
-    • This ensures critical settings (like `leader` key) are available when
-      synapse sets up keymaps
-    • The `first` list supports multiple name formats:
-      - "custom.config" - matches files like configs/custom.config.lua
-      - "configs.custom" - matches files like configs/custom.config.lua
-      - "custom" - matches files like configs/custom.config.lua
-    • Configs are loaded in the order specified in the `first` array
+    • Load configuration files **BEFORE** `synapse.setup()` if you need
+      settings (like `leader` key) available when keymaps are set up
+    • When loaded **BEFORE** `synapse.setup()`, configs are executed
+      immediately (even if they have `loaded` field for lazy loading)
+    • When loaded **AFTER** `synapse.setup()`, lazy loading is respected
+    • All `.config.lua` files in the specified path will be loaded
 
 Basic Format: ~
 >
-    -- config_dir/lua/plugins/example.config.lua
+    -- config_dir/lua/configs/custom.config.lua
+    return {
+        config = function()
+            -- Set leader key before synapse.setup()
+            vim.g.mapleader = " "
+            
+            -- Other basic settings
+            vim.opt.number = true
+            vim.opt.relativenumber = true
+        end,
+    }
+<
+
+Plugin Configuration Example: ~
+>
+    -- config_dir/lua/configs/plugin.config.lua
     return {
         config = function()
             local status, plugin = pcall(require, "plugin-name")
@@ -590,45 +596,29 @@ opts.config_path                          *synapse-options-opts-config-path*
     files (recursive scan). Scans for all `.lua` files that define plugin
     repositories, dependencies, tags, and execute commands.
 
-opts.load_config                          *synapse-options-opts-load-config*
-    Type: String or Table
-    Default: vim.fn.stdpath("config") .. "/lua"
-    Description: Directory to scan for plugin load configuration files
-    (recursive scan). Scans for all `.config.lua` files that contain plugin
-    configuration functions. These files are loaded when Neovim starts and
-    execute the `config()` function to set up plugins.
+Loading Configuration Files                  *synapse-loading-config-files*
+    Note: `load_config` is no longer a configuration option. Instead, you
+    should manually load your `.config.lua` files **BEFORE** `synapse.setup()`
+    if you need settings (like `leader` key) to be available.
 
-    Table Format: ~
+    Example: ~
 >
-        load_config = {
-            path = vim.fn.stdpath("config") .. "/lua",  -- Directory to scan
-            first = {                                    -- Optional: Priority configs
-                "custom.config",
-                "commands.config",
-                "keymaps.config",
-            },
-        }
+        -- In your init.lua, BEFORE synapse.setup()
+        local load_config = require("synapse.core.load")
+        load_config.load_config(vim.fn.stdpath("config") .. "/lua")
+        
+        -- Then setup synapse
+        require("synapse").setup({
+            -- ... your config
+        })
 <
 
-    String Format (simple): ~
->
-        load_config = vim.fn.stdpath("config") .. "/lua"
-<
-
-    opts.load_config.first                  *synapse-options-load-config-first*
-        Type: Table (array of strings)
-        Description: List of configuration files to load **BEFORE**
-        `synapse.setup()` executes. These configs are executed immediately,
-        even if they have `loaded` field for lazy loading. This ensures
-        critical settings (like `leader` key) are available when synapse
-        sets up keymaps.
-        
-        Name Formats Supported: ~
-            • "custom.config" - matches files like configs/custom.config.lua
-            • "configs.custom" - matches files like configs/custom.config.lua
-            • "custom" - matches files like configs/custom.config.lua
-        
-        Order: Configs are loaded in the order specified in the `first` array.
+    Why load before setup? ~
+        • If your configs set `leader` key or other basic settings, they need
+          to be loaded before `synapse.setup()` executes
+        • This ensures keymaps can use `<leader>` correctly
+        • Configs loaded before setup are executed immediately (no lazy
+          loading)
 
 opts.ui                                          *synapse-options-opts-ui*
     Type: Table
@@ -768,9 +758,22 @@ A: Check:
       subdirectories)
    2. Files return a table with a repo field
    3. repo field is not empty
-   4. Load configuration files (`.config.lua`) are in load_config if you
-      want to auto-load plugin configurations
-   5. Runtimepath is correctly set to include package directory
+   4. Runtimepath is correctly set to include package directory
+
+Q: Keymaps not working? ~
+A: Check:
+   1. Ensure you load configuration files (`.config.lua`) **BEFORE**
+      `synapse.setup()` if they set `leader` key
+   2. Check that `leader` key is set before synapse tries to set up keymaps
+   3. Example:
+>
+      -- Load configs first (sets leader key)
+      local load_config = require("synapse.core.load")
+      load_config.load_config(vim.fn.stdpath("config") .. "/lua")
+      
+      -- Then setup synapse (leader key is now available)
+      require("synapse").setup({ ... })
+<
 
 Q: Dependencies not installed? ~
 A: Check:

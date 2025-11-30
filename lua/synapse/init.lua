@@ -7,17 +7,16 @@ local M = {}
 --- @param user_config table|nil
 function M.setup(user_config)
 	local merged_config = config.merge(user_config)
+	vim.opt.rtp:append(merged_config.opts.package_path .. "/*")
+	vim.opt.rtp:append(merged_config.opts.package_path .. "/*/after")
 	
-	-- Load first-priority configs before setup (e.g., leader key, basic settings)
+	-- Load configs
 	if merged_config.opts.load_config then
-		load_config.load_first_config(merged_config.opts.load_config)
+		load_config.load_config(merged_config.opts.load_config)
 	end
-	
+
 	-- Setup commands and keymaps
 	commands.setup(merged_config)
-	
-	-- Load remaining configs
-	load_config.load_config(merged_config.opts.load_config)
 end
 
 return M
