@@ -81,4 +81,3 @@ function M.merge(user_config)
 end
 
 return M
-
