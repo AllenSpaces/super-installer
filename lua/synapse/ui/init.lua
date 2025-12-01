@@ -14,6 +14,8 @@ M.state = state.state
 --- @return table win
 function M.open(opts)
 	opts = opts or {}
+	-- 每次打开窗口前重置插件显示状态，避免上一次阶段残留的名称
+	state.reset_plugins_state()
 	highlights.ensure_highlights(opts.ui, state.state)
 	local win = window.create_window(opts.ui)
 
@@ -119,39 +121,18 @@ function M.show_report(errors, success_count, total, opts)
 		return
 	end
 
-	-- 统一在这里重建失败插件列表，避免重复和脏数据
-	-- 1. 先收集本次 errors 中的插件集合
-	local error_lookup = {}
-	for _, err in ipairs(errors) do
-		local plugin_name = err.plugin or err.repo or "unknown"
-		if plugin_name ~= nil and plugin_name ~= "" then
-			error_lookup[plugin_name] = true
-		end
-	end
-
-	-- 2. 基于 opts.failed_plugins + errors 去重重建列表
+	-- 统一在这里重建失败插件列表，仅根据本次 errors，避免混入已成功的插件
 	local failed_plugins = {}
 	local seen = {}
-
-	-- 先用调用方给的 failed_plugins 作为优先顺序，但只保留这次确实出错的插件
-	if opts.failed_plugins and #opts.failed_plugins > 0 then
-		for _, name in ipairs(opts.failed_plugins) do
-			if error_lookup[name] and not seen[name] then
-				table.insert(failed_plugins, name)
-				seen[name] = true
-			end
+	for _, err in ipairs(errors) do
+		local plugin_name = err.plugin or err.repo or "unknown"
+		if plugin_name and plugin_name ~= "" and not seen[plugin_name] then
+			table.insert(failed_plugins, plugin_name)
+			seen[plugin_name] = true
 		end
 	end
 
-	-- 再补上 errors 里有但 opts.failed_plugins 没有的
-	for name, _ in pairs(error_lookup) do
-		if not seen[name] then
-			table.insert(failed_plugins, name)
-			seen[name] = true
-		end
-	end
-
-	-- 3. 重置内部 failed_lookup，避免多次调用之间互相污染
+	-- 重置内部 failed_lookup，避免多次调用之间互相污染
 	state.state.failed_lookup = {}
 	for _, name in ipairs(failed_plugins) do
 		state.state.failed_lookup[name] = true
