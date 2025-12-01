@@ -8,15 +8,19 @@ local yaml_state = require("synapse.utils.yaml_state")
 local M = {}
 
 local installation_active = true
+local jobs = {}
 
 --- Execute commands sequentially in plugin directory
 --- @param commands table Array of command strings
 --- @param plugin_dir string Plugin installation directory
 --- @param callback function Callback function(success, err)
+--- @return number|nil job_id
 local function execute_commands(commands, plugin_dir, callback)
 	if not commands or #commands == 0 then
 		return callback(true, nil)
 	end
+
+	local job_ids = {}
 
 	local function run_next(index)
 		if index > #commands then
@@ -26,16 +30,20 @@ local function execute_commands(commands, plugin_dir, callback)
 		local cmd = commands[index]
 		local full_cmd = string.format("cd %s && %s", vim.fn.shellescape(plugin_dir), cmd)
 		
-		git_utils.execute_command(full_cmd, function(success, err)
+		local job_id = git_utils.execute_command(full_cmd, function(success, err)
 			if success then
 				run_next(index + 1)
 			else
 				callback(false, string.format("Execute command failed: %s - %s", cmd, err))
 			end
 		end)
+		if job_id then
+			table.insert(job_ids, job_id)
+		end
 	end
 
 	run_next(1)
+	return job_ids[1] -- Return first job_id for tracking
 end
 
 --- Ensure synapse.yaml exists, create empty file if it doesn't
@@ -46,6 +54,7 @@ end
 
 function M.start(config)
 	installation_active = true
+	jobs = {}
 	-- Clear error cache at start
 	error_ui.clear_cache()
 
@@ -180,6 +189,7 @@ function M.start(config)
 		end
 
 		installation_active = true
+		jobs = {}
 
 		local plugin_names = {}
 		for _, cfg in ipairs(queue) do
@@ -198,6 +208,11 @@ function M.start(config)
 			buffer = progress_win.buf,
 			callback = function()
 				installation_active = false
+				for _, job in ipairs(jobs) do
+					if job then
+						vim.fn.jobstop(job)
+					end
+				end
 			end,
 		})
 
@@ -282,7 +297,7 @@ function M.start(config)
 				ui.update_progress(progress_win, { plugin = display_name, status = "active" }, completed, total, config.opts.ui)
 			end)
 
-			M.install_plugin(plugin_config, config.method, config.opts.package_path, is_main_plugin, function(success, err)
+			local job_id = M.install_plugin(plugin_config, config.method, config.opts.package_path, is_main_plugin, function(success, err)
 				running_count = running_count - 1
 				completed = completed + 1
 
@@ -309,6 +324,9 @@ function M.start(config)
 				-- 尝试启动下一个任务
 				start_next_task()
 			end)
+			if job_id then
+				table.insert(jobs, job_id)
+			end
 		end
 
 		-- 启动初始任务（最多5个）
@@ -385,7 +403,7 @@ function M.install_plugin(plugin_config, git_config, package_path, is_main_plugi
 		end
 	end
 
-	git_utils.execute_command(command, function(success, err)
+	local job_id = git_utils.execute_command(command, function(success, err)
 		if not success then
 			return callback(false, err)
 		end
@@ -409,6 +427,7 @@ function M.install_plugin(plugin_config, git_config, package_path, is_main_plugi
 			callback(true, nil)
 		end
 	end)
+	return job_id
 end
 
 return M

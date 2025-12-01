@@ -8,9 +8,11 @@ local string_utils = require("synapse.utils.string")
 local M = {}
 
 local cleanup_active = true
+local jobs = {}
 
 function M.start(config)
 	cleanup_active = true
+	jobs = {}
 	-- Clear error cache at start
 	error_ui.clear_cache()
 	-- 从 config_path 读取配置文件
@@ -62,12 +64,13 @@ function M.start(config)
 		return
 	end
 
-	local function run_removal_queue(queue)
+		local function run_removal_queue(queue)
 		if not queue or #queue == 0 then
 			return
 		end
 
 		cleanup_active = true
+		jobs = {}
 
 		local progress_win = nil
 		if #queue > 1 then
@@ -82,6 +85,11 @@ function M.start(config)
 				buffer = progress_win.buf,
 				callback = function()
 					cleanup_active = false
+					for _, job in ipairs(jobs) do
+						if job then
+							vim.fn.jobstop(job)
+						end
+					end
 				end,
 			})
 
@@ -165,7 +173,7 @@ function M.start(config)
 				end)
 			end
 
-			M.remove_plugin(plugin, config.opts.package_path, function(success, err)
+			local job_id = M.remove_plugin(plugin, config.opts.package_path, function(success, err)
 				running_count = running_count - 1
 				completed = completed + 1
 
@@ -193,6 +201,9 @@ function M.start(config)
 				-- 尝试启动下一个任务
 				start_next_removal()
 			end)
+			if job_id then
+				table.insert(jobs, job_id)
+			end
 		end
 
 		-- 启动初始任务（最多5个）
@@ -217,7 +228,7 @@ function M.remove_plugin(plugin_name, package_path, callback)
 	
 	-- Remove the plugin
 	local cmd = string.format("rm -rf %s", vim.fn.shellescape(install_path))
-	git_utils.execute_command(cmd, function(success, err)
+	local job_id = git_utils.execute_command(cmd, function(success, err)
 		if success then
 			-- Remove from synapse.yaml
 			yaml_state.remove_plugin_entry(package_path, plugin_name)
@@ -246,6 +257,7 @@ function M.remove_plugin(plugin_name, package_path, callback)
 		end
 		callback(success, err)
 	end)
+	return job_id
 end
 
 return M
