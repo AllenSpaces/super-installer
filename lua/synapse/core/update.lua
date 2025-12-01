@@ -309,6 +309,9 @@ function M.start(config)
 			end
 
 			local update_errors = {}
+			-- 先关掉检查阶段的进度窗口，避免窗口/缓冲区复用时残留上一次的插件名称
+			ui.close()
+
 			local update_win = ui.open({
 				header = config.opts.ui.header,
 				icon = config.opts.ui.icons.update,
