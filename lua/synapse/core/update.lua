@@ -470,19 +470,36 @@ function M.check_plugin(plugin, package_path, plugin_config, callback)
 		return callback(false, "Directory is not found")
 	end
 
-	-- 检查 tag 是否变化（使用 yaml_state）
-	local _, yaml_tag = yaml_state.get_branch_tag(package_path, plugin_name)
-	
+	-- 从 YAML 获取当前记录的 branch / tag
+	local yaml_branch, yaml_tag = yaml_state.get_branch_tag(package_path, plugin_name)
+	-- 配置中的 tag / branch
 	local config_tag = plugin_config and plugin_config.tag or nil
+	local config_branch = plugin_config and plugin_config.branch or nil
 	
-	-- 如果配置中的 tag 与 YAML 中的不同，需要更新
+	-- 1. 如果配置中的 tag 与 YAML 中的不同，需要更新
 	if config_tag ~= yaml_tag then
 		return callback(true, "need_update")
 	end
 
-	-- 如果当前是 tag 模式，不需要检查分支更新
+	-- 2. tag 一致且存在 tag：认为已经是对应 tag，不再检查分支
 	if yaml_tag or config_tag then
 		return callback(true, "already_updated")
+	end
+
+	-- 3. 无 tag 模式下，检查 branch 是否变化（clone_conf.branch）
+	local function normalize_branch(branch)
+		if not branch or branch == "main" or branch == "master" then
+			return nil
+		end
+		return branch
+	end
+
+	local norm_cfg_branch = normalize_branch(config_branch)
+	local norm_yaml_branch = normalize_branch(yaml_branch)
+
+	if norm_cfg_branch ~= norm_yaml_branch then
+		-- 仅分支不同也需要执行更新流程（触发 update_plugin）
+		return callback(true, "need_update")
 	end
 
 	local fetch_cmd = string.format("cd %s && git fetch --quiet", install_dir)
