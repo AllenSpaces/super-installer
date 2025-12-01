@@ -611,10 +611,11 @@ function M.update_plugin(plugin, package_path, plugin_config, is_main_plugin, co
 
 	if norm_cfg_branch ~= norm_yaml_branch then
 		if norm_cfg_branch then
-			-- 从 A -> B：切换分支再拉最新代码
+			-- 从 A -> B：使用 git checkout -b/-B 基于远端分支创建/重置本地分支，再拉最新代码
 			local cmd = string.format(
-				"cd %s && git fetch origin && git checkout %s && git pull origin %s && git submodule update --init --recursive",
+				"cd %s && git fetch origin && git checkout -B %s origin/%s && git pull origin %s && git submodule update --init --recursive",
 				vim.fn.shellescape(install_dir),
+				norm_cfg_branch,
 				norm_cfg_branch,
 				norm_cfg_branch
 			)
@@ -658,8 +659,9 @@ function M.update_plugin(plugin, package_path, plugin_config, is_main_plugin, co
 		local branch = norm_cfg_branch or norm_yaml_branch
 		if branch then
 			cmd = string.format(
-				"cd %s && git fetch origin && git checkout %s && git pull origin %s && git submodule update --init --recursive",
+				"cd %s && git fetch origin && git checkout -B %s origin/%s && git pull origin %s && git submodule update --init --recursive",
 				vim.fn.shellescape(install_dir),
+				branch,
 				branch,
 				branch
 			)
