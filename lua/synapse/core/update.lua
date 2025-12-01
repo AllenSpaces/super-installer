@@ -112,7 +112,8 @@ function M.start(config)
 	local function plugin_names(list)
 		local names = {}
 		for _, repo in ipairs(list) do
-			table.insert(names, string_utils.get_plugin_name(repo))
+			-- UI 中直接显示完整 repo 名称
+			table.insert(names, repo)
 		end
 		return names
 	end
@@ -262,7 +263,8 @@ function M.start(config)
 				-- 取出下一个任务
 				local queue_index = table.remove(pending_queue, 1)
 				local repo = queue[queue_index]
-				local plugin_name = string_utils.get_plugin_name(repo)
+				-- 显示名称使用完整 repo
+				local display_name = repo
 
 				running_count = running_count + 1
 
@@ -270,7 +272,7 @@ function M.start(config)
 				vim.schedule(function()
 					ui.update_progress(
 						progress_win,
-						{ plugin = plugin_name, status = "active" },
+						{ plugin = display_name, status = "active" },
 						completed,
 						total,
 						config.opts.ui
@@ -281,14 +283,14 @@ function M.start(config)
 				M.check_plugin(repo, config.opts.package_path, repo_to_config[repo], function(ok, result)
 					if not ok then
 						-- 检查失败，直接记为错误
-						table.insert(errors, { plugin = plugin_name, error = result, repo = repo })
-						error_ui.save_error(plugin_name, result or "Check failed")
+						table.insert(errors, { plugin = display_name, error = result, repo = repo })
+						error_ui.save_error(display_name, result or "Check failed")
 						completed = completed + 1
 						running_count = running_count - 1
 						vim.schedule(function()
 							ui.update_progress(
 								progress_win,
-								{ plugin = plugin_name, status = "failed" },
+								{ plugin = display_name, status = "failed" },
 								completed,
 								total,
 								config.opts.ui
@@ -315,20 +317,20 @@ function M.start(config)
 									vim.schedule(function()
 										ui.update_progress(
 											progress_win,
-											{ plugin = plugin_name, status = "done" },
+											{ plugin = display_name, status = "done" },
 											completed,
 											total,
 											config.opts.ui
 										)
 									end)
 								else
-									table.insert(errors, { plugin = plugin_name, error = err2, repo = repo })
-									error_ui.save_error(plugin_name, err2 or "Update failed")
+									table.insert(errors, { plugin = display_name, error = err2, repo = repo })
+									error_ui.save_error(display_name, err2 or "Update failed")
 									completed = completed + 1
 									vim.schedule(function()
 										ui.update_progress(
 											progress_win,
-											{ plugin = plugin_name, status = "failed" },
+											{ plugin = display_name, status = "failed" },
 											completed,
 											total,
 											config.opts.ui
@@ -347,7 +349,7 @@ function M.start(config)
 						vim.schedule(function()
 							ui.update_progress(
 								progress_win,
-								{ plugin = plugin_name, status = "done" },
+								{ plugin = display_name, status = "done" },
 								completed,
 								total,
 								config.opts.ui

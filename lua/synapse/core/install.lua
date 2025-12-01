@@ -183,7 +183,8 @@ function M.start(config)
 
 		local plugin_names = {}
 		for _, cfg in ipairs(queue) do
-			table.insert(plugin_names, string_utils.get_plugin_name(cfg.repo))
+			-- UI 中直接显示完整 repo 名称（不再根据斜杠分割）
+			table.insert(plugin_names, cfg.repo)
 		end
 
 		local progress_win = ui.open({
@@ -226,8 +227,8 @@ function M.start(config)
 						local retry_queue = {}
 						for _, err in ipairs(errors) do
 							for _, cfg in ipairs(queue) do
-								local plugin_name = string_utils.get_plugin_name(cfg.repo)
-								if plugin_name == err.plugin then
+								-- 这里 err.plugin 现在是完整 repo 名称，直接比较 repo 字段
+								if cfg.repo == err.plugin then
 									table.insert(retry_queue, cfg)
 									break
 								end
@@ -273,12 +274,12 @@ function M.start(config)
 			-- 从队列中取出一个任务
 			local queue_index = table.remove(pending_queue, 1)
 			local plugin_config = queue[queue_index]
-			local plugin_name = string_utils.get_plugin_name(plugin_config.repo)
+			local display_name = plugin_config.repo
 			local is_main_plugin = main_plugin_repos[plugin_config.repo] == true
 
 			running_count = running_count + 1
 			vim.schedule(function()
-				ui.update_progress(progress_win, { plugin = plugin_name, status = "active" }, completed, total, config.opts.ui)
+				ui.update_progress(progress_win, { plugin = display_name, status = "active" }, completed, total, config.opts.ui)
 			end)
 
 			M.install_plugin(plugin_config, config.method, config.opts.package_path, is_main_plugin, function(success, err)
@@ -288,16 +289,17 @@ function M.start(config)
 				if success then
 					installed_count = installed_count + 1
 				else
-					table.insert(errors, { plugin = plugin_name, error = err })
-					table.insert(failed_list, plugin_name)
-					error_ui.save_error(plugin_name, err or "Installation failed")
+					-- 错误和 UI 中都使用完整 repo 名称
+					table.insert(errors, { plugin = display_name, error = err })
+					table.insert(failed_list, display_name)
+					error_ui.save_error(display_name, err or "Installation failed")
 				end
 
 				-- 立即更新进度条
 				vim.schedule(function()
 					ui.update_progress(
 						progress_win,
-						{ plugin = plugin_name, status = success and "done" or "failed" },
+						{ plugin = display_name, status = success and "done" or "failed" },
 						completed,
 						total,
 						config.opts.ui
