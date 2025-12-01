@@ -220,46 +220,53 @@ function M.start(config)
 			ui.update_progress(progress_win, nil, 0, #targets, config.opts.ui)
 		end)
 
-		local function run_checks(queue, callback)
+		-- 在同一个窗口里执行：检查 → 如需更新则立即更新，最多同时执行 10 个插件任务
+		local function run_checks(queue)
 			local total = #queue
 			local completed = 0
 			local errors = {}
-			local pending_update = {}
+			local success_count = 0
 
-			-- 并发执行器：最多同时执行10个任务
+			local function done_all()
+				aggregate.checks = aggregate.checks + total
+				aggregate.check_success = aggregate.check_success + success_count
+				aggregate.total = aggregate.total + total
+				vim.list_extend(aggregate.errors, errors)
+				finalize_run()
+			end
+
 			local MAX_CONCURRENT = 10
 			local pending_queue = {}
 			local running_count = 0
 
-			-- 初始化待执行队列
 			for i = 1, #queue do
 				table.insert(pending_queue, i)
 			end
 
-			local function start_next_check()
+			local function start_next_task()
 				if is_update_aborted then
 					return
 				end
 
-				-- 如果队列为空且没有正在运行的任务，完成
+				-- 所有任务都完成
 				if #pending_queue == 0 and running_count == 0 then
-					aggregate.checks = aggregate.checks + total
-					aggregate.check_success = aggregate.check_success + math.max(0, total - #errors)
-					callback(pending_update, errors)
+					done_all()
 					return
 				end
 
-				-- 如果正在运行的任务达到上限或队列为空，等待
+				-- 已达并发上限或没有待执行任务
 				if running_count >= MAX_CONCURRENT or #pending_queue == 0 then
 					return
 				end
 
-				-- 从队列中取出一个任务
+				-- 取出下一个任务
 				local queue_index = table.remove(pending_queue, 1)
 				local repo = queue[queue_index]
 				local plugin_name = string_utils.get_plugin_name(repo)
 
 				running_count = running_count + 1
+
+				-- 标记为 active
 				vim.schedule(function()
 					ui.update_progress(
 						progress_win,
@@ -270,192 +277,95 @@ function M.start(config)
 					)
 				end)
 
+				-- 针对单个插件的任务：先 check 再（如需要）update
 				M.check_plugin(repo, config.opts.package_path, repo_to_config[repo], function(ok, result)
-					running_count = running_count - 1
-					completed = completed + 1
-
-					if ok and result == "need_update" then
-						table.insert(pending_update, repo)
-					elseif not ok then
+					if not ok then
+						-- 检查失败，直接记为错误
 						table.insert(errors, { plugin = plugin_name, error = result, repo = repo })
 						error_ui.save_error(plugin_name, result or "Check failed")
+						completed = completed + 1
+						running_count = running_count - 1
+						vim.schedule(function()
+							ui.update_progress(
+								progress_win,
+								{ plugin = plugin_name, status = "failed" },
+								completed,
+								total,
+								config.opts.ui
+							)
+						end)
+						-- 尝试启动下一个任务
+						start_next_task()
+						return
 					end
 
-					-- 立即更新进度条
-					vim.schedule(function()
-						ui.update_progress(
-							progress_win,
-							{ plugin = plugin_name, status = ok and "done" or "failed" },
-							completed,
-							total,
-							config.opts.ui
+					if result == "need_update" then
+						-- 需要更新：立即更新当前插件
+						local is_main_plugin = main_plugin_repos[repo] == true
+						M.update_plugin(
+							repo,
+							config.opts.package_path,
+							repo_to_config[repo],
+							is_main_plugin,
+							config,
+							function(ok2, err2)
+								if ok2 then
+									success_count = success_count + 1
+									completed = completed + 1
+									vim.schedule(function()
+										ui.update_progress(
+											progress_win,
+											{ plugin = plugin_name, status = "done" },
+											completed,
+											total,
+											config.opts.ui
+										)
+									end)
+								else
+									table.insert(errors, { plugin = plugin_name, error = err2, repo = repo })
+									error_ui.save_error(plugin_name, err2 or "Update failed")
+									completed = completed + 1
+									vim.schedule(function()
+										ui.update_progress(
+											progress_win,
+											{ plugin = plugin_name, status = "failed" },
+											completed,
+											total,
+											config.opts.ui
+										)
+									end)
+								end
+								running_count = running_count - 1
+								start_next_task()
+							end
 						)
-					end)
-
-					-- 尝试启动下一个任务
-					start_next_check()
-				end)
-			end
-
-			-- 启动初始任务（最多5个）
-			for i = 1, math.min(MAX_CONCURRENT, #pending_queue) do
-				start_next_check()
-			end
-		end
-
-		local function run_updates(queue, check_failures, attempt_id, aggregate_stats, on_complete)
-			if is_update_aborted then
-				return
-			end
-
-			local update_errors = {}
-			-- 先关掉检查阶段的进度窗口，避免窗口/缓冲区复用时残留上一次的插件名称
-			ui.close()
-
-			local update_win = ui.open({
-				header = config.opts.ui.header,
-				icon = config.opts.ui.icons.update,
-				plugins = plugin_names(queue),
-				ui = config.opts.ui,
-			})
-			ensure_close(update_win.buf)
-
-			local total = #queue
-			local completed = 0
-			local success_count = 0
-
-			-- 初始化进度显示为 0
-			vim.schedule(function()
-				ui.update_progress(update_win, nil, 0, total, config.opts.ui)
-			end)
-
-			local function finalize_updates()
-				if is_update_aborted then
-					return
-				end
-
-				aggregate_stats.success = aggregate_stats.success + success_count
-				aggregate_stats.total = aggregate_stats.total + total
-				vim.list_extend(aggregate_stats.errors, update_errors)
-
-				if check_failures and #check_failures > 0 then
-					if attempt_id < 2 then
-						local retry_targets = extract_retry_targets(check_failures)
-						if #retry_targets > 0 then
-							start_update_flow(retry_targets, attempt_id + 1, aggregate_stats)
-							return
-						end
 					else
-						vim.list_extend(aggregate_stats.errors, check_failures)
-					end
-				end
-
-				on_complete()
-			end
-
-			-- 并发执行器：最多同时执行10个任务
-			local MAX_CONCURRENT = 10
-			local pending_queue = {}
-			local running_count = 0
-
-			-- 初始化待执行队列
-			for i = 1, #queue do
-				table.insert(pending_queue, i)
-			end
-
-			local function start_next_update()
-				if is_update_aborted then
-					return
-				end
-
-				-- 如果队列为空且没有正在运行的任务，完成
-				if #pending_queue == 0 and running_count == 0 then
-					finalize_updates()
-					return
-				end
-
-				-- 如果正在运行的任务达到上限或队列为空，等待
-				if running_count >= MAX_CONCURRENT or #pending_queue == 0 then
-					return
-				end
-
-				-- 从队列中取出一个任务
-				local queue_index = table.remove(pending_queue, 1)
-				local repo = queue[queue_index]
-				local plugin_name = string_utils.get_plugin_name(repo)
-				local is_main_plugin = main_plugin_repos[repo] == true
-
-				running_count = running_count + 1
-				vim.schedule(function()
-					ui.update_progress(
-						update_win,
-						{ plugin = plugin_name, status = "active" },
-						completed,
-						total,
-						config.opts.ui
-					)
-				end)
-
-				M.update_plugin(repo, config.opts.package_path, repo_to_config[repo], is_main_plugin, config, function(ok, err)
-					running_count = running_count - 1
-					completed = completed + 1
-
-					if ok then
+						-- 已是最新：直接标记为 done
 						success_count = success_count + 1
-					else
-						table.insert(update_errors, { plugin = plugin_name, error = err, repo = repo })
-						error_ui.save_error(plugin_name, err or "Update failed")
+						completed = completed + 1
+						running_count = running_count - 1
+						vim.schedule(function()
+							ui.update_progress(
+								progress_win,
+								{ plugin = plugin_name, status = "done" },
+								completed,
+								total,
+								config.opts.ui
+							)
+						end)
+						start_next_task()
 					end
-
-					-- 立即更新进度条
-					vim.schedule(function()
-						ui.update_progress(
-							update_win,
-							{ plugin = plugin_name, status = ok and "done" or "failed" },
-							completed,
-							total,
-							config.opts.ui
-						)
-					end)
-
-					-- 尝试启动下一个任务
-					start_next_update()
 				end)
 			end
 
-			-- 启动初始任务（最多5个）
-			for i = 1, math.min(MAX_CONCURRENT, #pending_queue) do
-				start_next_update()
+			-- 启动初始任务（最多 MAX_CONCURRENT 个）
+			for _ = 1, math.min(MAX_CONCURRENT, #pending_queue) do
+				start_next_task()
 			end
 		end
 
-		run_checks(targets, function(pending_update, check_errors)
-			if is_update_aborted then
-				return
-			end
-
-			local function handle_completion()
-				if #check_errors > 0 then
-					if attempt < 2 then
-						local retry_targets = extract_retry_targets(check_errors)
-						if #retry_targets > 0 then
-							start_update_flow(retry_targets, attempt + 1, aggregate)
-							return
-						end
-					else
-						vim.list_extend(aggregate.errors, check_errors)
-					end
-				end
-				finalize_run()
-			end
-
-			if #pending_update == 0 then
-				handle_completion()
-				return
-			end
-
-			run_updates(pending_update, check_errors, attempt, aggregate, handle_completion)
-		end)
+		-- 只用一个窗口：检查 + 按需立即更新
+		run_checks(targets)
 	end
 
 	start_update_flow(plugins)
