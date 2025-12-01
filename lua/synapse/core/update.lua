@@ -3,15 +3,7 @@ local error_ui = require("synapse.ui.error")
 local git_utils = require("synapse.utils.git")
 local config_utils = require("synapse.utils.config")
 local string_utils = require("synapse.utils.string")
-local yaml_utils = require("synapse.utils.yaml")
-
---- Parse a dependency item (supports both string and table formats)
---- @param dep string|table Dependency item
---- @return string repo Repository path
---- @return table|nil opt Optional configuration table
-local function parse_dependency(dep)
-	return config_utils.parse_dependency(dep)
-end
+local yaml_state = require("synapse.utils.yaml_state")
 
 local M = {}
 
@@ -90,7 +82,7 @@ function M.start(config)
 			-- 添加依赖项
 			if plugin_config.depend and type(plugin_config.depend) == "table" then
 				for _, dep_item in ipairs(plugin_config.depend) do
-					local dep_repo, dep_opt = parse_dependency(dep_item)
+					local dep_repo, dep_opt = config_utils.parse_dependency(dep_item)
 					if dep_repo and not plugin_set[dep_repo] then
 						table.insert(plugins, dep_repo)
 						plugin_set[dep_repo] = true
@@ -479,8 +471,7 @@ function M.check_plugin(plugin, package_path, plugin_config, callback)
 	end
 
 	-- 检查 tag 是否变化
-	local yaml_path = yaml_utils.get_yaml_path(package_path)
-	local yaml_data, _ = yaml_utils.read(yaml_path)
+	local yaml_data, _ = yaml_utils.read(yaml_utils.get_yaml_path(package_path))
 	local yaml_tag = nil
 	if yaml_data and yaml_data.plugins then
 		for _, p in ipairs(yaml_data.plugins) do
@@ -537,19 +528,7 @@ function M.update_plugin(plugin, package_path, plugin_config, is_main_plugin, co
 	local config_branch = plugin_config and plugin_config.branch or nil
 	
 	-- 获取 YAML 中的 tag 和 branch
-	local yaml_path = yaml_utils.get_yaml_path(package_path)
-	local yaml_data, _ = yaml_utils.read(yaml_path)
-	local yaml_tag = nil
-	local yaml_branch = nil
-	if yaml_data and yaml_data.plugins then
-		for _, p in ipairs(yaml_data.plugins) do
-			if p.name == plugin_name then
-				yaml_tag = p.tag
-				yaml_branch = p.branch
-				break
-			end
-		end
-	end
+	local yaml_branch, yaml_tag = yaml_state.get_branch_tag(package_path, plugin_name)
 	
 	-- 检测 tag 或 branch 是否有变化
 	local tag_changed = false

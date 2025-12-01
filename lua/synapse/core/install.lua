@@ -3,15 +3,7 @@ local error_ui = require("synapse.ui.error")
 local git_utils = require("synapse.utils.git")
 local config_utils = require("synapse.utils.config")
 local string_utils = require("synapse.utils.string")
-local yaml_utils = require("synapse.utils.yaml")
-
---- Parse a dependency item (supports both string and table formats)
---- @param dep string|table Dependency item
---- @return string repo Repository path
---- @return table|nil opt Optional configuration table
-local function parse_dependency(dep)
-	return config_utils.parse_dependency(dep)
-end
+local yaml_state = require("synapse.utils.yaml_state")
 
 local M = {}
 
@@ -49,16 +41,7 @@ end
 --- Ensure synapse.yaml exists, create empty file if it doesn't
 --- @param config table
 local function ensure_yaml_exists(config)
-	local yaml_path = yaml_utils.get_yaml_path(config.opts.package_path)
-	
-	-- Check if synapse.yaml already exists
-	if vim.fn.filereadable(yaml_path) == 1 then
-		return
-	end
-	
-	-- Create empty YAML file
-	local yaml_data = { plugins = {} }
-	yaml_utils.write(yaml_path, yaml_data)
+	yaml_state.ensure_yaml_exists(config.opts.package_path)
 end
 
 function M.start(config)
@@ -118,7 +101,7 @@ function M.start(config)
 		end
 		
 		for _, dep_item in ipairs(plugin_config.depend) do
-			local dep_repo, dep_opt = parse_dependency(dep_item)
+			local dep_repo, dep_opt = config_utils.parse_dependency(dep_item)
 			if dep_repo and not processed_repos[dep_repo] then
 				-- 如果依赖项本身也是主插件，使用主插件的配置
 				if main_plugin_map[dep_repo] then
@@ -335,166 +318,7 @@ function M.start(config)
 	run_install_queue(pending_install)
 end
 
---- Get plugin branch and tag from synapse.yaml
---- @param package_path string
---- @param plugin_name string
---- @return string|nil branch
---- @return string|nil tag
-local function get_branch_tag_from_yaml(package_path, plugin_name)
-	local yaml_path = yaml_utils.get_yaml_path(package_path)
-	local data, _ = yaml_utils.read(yaml_path)
-	
-	if data and data.plugins then
-		for _, plugin in ipairs(data.plugins) do
-			if plugin.name == plugin_name then
-				return plugin.branch, plugin.tag
-			end
-		end
-	end
-	
-	return nil, nil
-end
-
---- Update synapse.yaml with plugin information (only for main plugins)
---- @param package_path string
---- @param plugin_name string
---- @param plugin_config table
---- @param actual_branch string|nil The actual branch used for installation
---- @param actual_tag string|nil The actual tag used for installation
---- @param is_main_plugin boolean Whether this is a main plugin
-local function update_yaml(package_path, plugin_name, plugin_config, actual_branch, actual_tag, is_main_plugin)
-	-- Only save main plugins, skip dependencies
-	if not is_main_plugin then
-		return
-	end
-	
-	local yaml_path = yaml_utils.get_yaml_path(package_path)
-	
-	-- Read existing YAML or create new
-	local data, err = yaml_utils.read(yaml_path)
-	if not data then
-		data = { plugins = {} }
-	end
-	
-	-- Keep depend repos as full repo paths (e.g., "nvim-lua/plenary.nvim")
-	-- Extract repo strings from dependency items (support both string and table formats)
-	local depend_repos = {}
-	if plugin_config.depend and type(plugin_config.depend) == "table" then
-		for _, dep_item in ipairs(plugin_config.depend) do
-			local dep_repo = parse_dependency(dep_item)
-			if dep_repo then
-				table.insert(depend_repos, dep_repo)
-			end
-		end
-	end
-	
-	-- Collect all repos that appear in any plugin's depend field
-	local all_depend_repos = {}
-	for _, plugin in ipairs(data.plugins) do
-		if plugin.depend and type(plugin.depend) == "table" then
-			for _, dep_item in ipairs(plugin.depend) do
-				local dep_repo = parse_dependency(dep_item)
-				if dep_repo then
-					all_depend_repos[dep_repo] = true
-				end
-			end
-		end
-	end
-	
-	-- Also add current plugin's depend repos to the set
-	for _, dep_repo in ipairs(depend_repos) do
-		all_depend_repos[dep_repo] = true
-	end
-	
-	-- Check if current plugin's repo is in any depend field
-	local current_repo = plugin_config.repo
-	local is_in_depend = all_depend_repos[current_repo] == true
-	
-	-- If this repo is in any depend field, don't save it as a main plugin
-	if is_in_depend then
-		return
-	end
-	
-	-- Check if plugin already exists
-	local found = false
-	local found_index = nil
-	for i, plugin in ipairs(data.plugins) do
-		if plugin.name == plugin_name then
-			found = true
-			found_index = i
-			break
-		end
-	end
-	
-	if found then
-		-- Check if this plugin's repo is in any other plugin's depend field
-		local is_in_other_depend = false
-		for _, plugin in ipairs(data.plugins) do
-			if plugin.name ~= plugin_name and plugin.depend and type(plugin.depend) == "table" then
-				for _, dep_item in ipairs(plugin.depend) do
-					local dep_repo = parse_dependency(dep_item)
-					if dep_repo == current_repo then
-						is_in_other_depend = true
-						break
-					end
-				end
-				if is_in_other_depend then
-					break
-				end
-			end
-		end
-		
-		-- If this plugin is in another plugin's depend, remove it from plugins list
-		if is_in_other_depend then
-			table.remove(data.plugins, found_index)
-			-- Write back and return
-			yaml_utils.write(yaml_path, data)
-			return
-		end
-		
-		-- Update existing entry
-		-- Use actual_branch if provided, otherwise use plugin_config.branch
-		local branch = actual_branch or plugin_config.branch
-		if branch and branch ~= "main" and branch ~= "master" then
-			data.plugins[found_index].branch = branch
-		else
-			-- Remove branch field if it's default
-			data.plugins[found_index].branch = nil
-		end
-		-- Save tag if exists (use actual_tag if provided, otherwise use plugin_config.tag)
-		local tag = actual_tag or plugin_config.tag
-		if tag then
-			data.plugins[found_index].tag = tag
-		else
-			data.plugins[found_index].tag = nil
-		end
-		data.plugins[found_index].repo = current_repo
-		data.plugins[found_index].depend = depend_repos
-	end
-	
-	-- Add new plugin if not found
-	if not found then
-		local plugin_entry = {
-			name = plugin_name,
-			repo = current_repo,
-			depend = depend_repos,
-		}
-		-- Use actual_branch if provided, otherwise use plugin_config.branch
-		local branch = actual_branch or plugin_config.branch
-		if branch and branch ~= "main" and branch ~= "master" then
-			plugin_entry.branch = branch
-		end
-		-- Save tag if exists (use actual_tag if provided, otherwise use plugin_config.tag)
-		local tag = actual_tag or plugin_config.tag
-		if tag then
-			plugin_entry.tag = tag
-		end
-		table.insert(data.plugins, plugin_entry)
-	end
-	
-	-- Write back to file
-	yaml_utils.write(yaml_path, data)
-end
+-- YAML metadata helpers are centralized in synapse.utils.yaml_state
 
 function M.install_plugin(plugin_config, git_config, package_path, is_main_plugin, callback)
 	if not installation_active then
@@ -511,7 +335,7 @@ function M.install_plugin(plugin_config, git_config, package_path, is_main_plugi
 	local tag = plugin_config.tag  -- Always prioritize config tag
 	if vim.fn.isdirectory(target_dir) == 1 then
 		-- Plugin already exists, try to get branch and tag from synapse.yaml
-		local yaml_branch, yaml_tag = get_branch_tag_from_yaml(package_path, plugin_name)
+		local yaml_branch, yaml_tag = yaml_state.get_branch_tag(package_path, plugin_name)
 		-- Only use yaml_branch if it's not "main" or "master" (these shouldn't be used)
 		if not branch and yaml_branch and yaml_branch ~= "main" and yaml_branch ~= "master" then
 			branch = yaml_branch
@@ -573,13 +397,13 @@ function M.install_plugin(plugin_config, git_config, package_path, is_main_plugi
 
 				-- Update synapse.yaml on successful installation (only for main plugins)
 				-- Pass the actual branch and tag used for installation
-				update_yaml(package_path, plugin_name, plugin_config, branch, tag, is_main_plugin)
+				yaml_state.update_main_plugin(package_path, plugin_name, plugin_config, branch, tag, is_main_plugin)
 				callback(true, nil)
 			end)
 		else
 			-- Update synapse.yaml on successful installation (only for main plugins)
 			-- Pass the actual branch and tag used for installation
-			update_yaml(package_path, plugin_name, plugin_config, branch, tag, is_main_plugin)
+			yaml_state.update_main_plugin(package_path, plugin_name, plugin_config, branch, tag, is_main_plugin)
 			callback(true, nil)
 		end
 	end)
