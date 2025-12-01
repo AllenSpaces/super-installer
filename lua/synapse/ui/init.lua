@@ -119,15 +119,42 @@ function M.show_report(errors, success_count, total, opts)
 		return
 	end
 
-	local failed_plugins = opts.failed_plugins or {}
-	if #failed_plugins == 0 then
-		for _, err in ipairs(errors) do
-			local plugin_name = err.plugin or err.repo or "unknown"
-			if not state.state.failed_lookup[plugin_name] then
-				table.insert(failed_plugins, plugin_name)
-				state.state.failed_lookup[plugin_name] = true
+	-- 统一在这里重建失败插件列表，避免重复和脏数据
+	-- 1. 先收集本次 errors 中的插件集合
+	local error_lookup = {}
+	for _, err in ipairs(errors) do
+		local plugin_name = err.plugin or err.repo or "unknown"
+		if plugin_name ~= nil and plugin_name ~= "" then
+			error_lookup[plugin_name] = true
+		end
+	end
+
+	-- 2. 基于 opts.failed_plugins + errors 去重重建列表
+	local failed_plugins = {}
+	local seen = {}
+
+	-- 先用调用方给的 failed_plugins 作为优先顺序，但只保留这次确实出错的插件
+	if opts.failed_plugins and #opts.failed_plugins > 0 then
+		for _, name in ipairs(opts.failed_plugins) do
+			if error_lookup[name] and not seen[name] then
+				table.insert(failed_plugins, name)
+				seen[name] = true
 			end
 		end
+	end
+
+	-- 再补上 errors 里有但 opts.failed_plugins 没有的
+	for name, _ in pairs(error_lookup) do
+		if not seen[name] then
+			table.insert(failed_plugins, name)
+			seen[name] = true
+		end
+	end
+
+	-- 3. 重置内部 failed_lookup，避免多次调用之间互相污染
+	state.state.failed_lookup = {}
+	for _, name in ipairs(failed_plugins) do
+		state.state.failed_lookup[name] = true
 	end
 
 	-- Set failed plugins in display
