@@ -513,97 +513,144 @@ function M.update_plugin(plugin, package_path, plugin_config, is_main_plugin, co
 	local plugin_name = plugin:match("([^/]+)$")
 	plugin_name = plugin_name:gsub("%.git$", "")
 	local install_dir = git_utils.get_install_dir(plugin_name, "update", package_path)
-	
-	-- 获取配置中的 tag 和 branch
+
+	-- 获取配置中的 tag 和 branch（branch 源自 clone_conf.branch）
 	local config_tag = plugin_config and plugin_config.tag or nil
 	local config_branch = plugin_config and plugin_config.branch or nil
-	
-	-- 获取 YAML 中的 tag 和 branch
+
+	-- 获取 YAML 中记录的 tag 和 branch
 	local yaml_branch, yaml_tag = yaml_state.get_branch_tag(package_path, plugin_name)
-	
-	-- 检测 tag 或 branch 是否有变化
-	local tag_changed = false
-	local branch_changed = false
-	
-	-- 标准化 branch：nil、"main"、"master" 都视为默认分支
-	local normalize_branch = function(branch)
+
+	-- 如果目录不存在，直接按当前配置重新安装
+	local function reinstall(reason)
+		local install_module = require("synapse.core.install")
+		local git_method = (config and config.method) or "https"
+		install_module.install_plugin(plugin_config, git_method, package_path, is_main_plugin, function(ok, err)
+			if not ok then
+				return callback(false, (reason or "Reinstall failed") .. ": " .. (err or "Unknown error"))
+			end
+			callback(true, reason or "Reinstalled")
+		end)
+	end
+
+	if vim.fn.isdirectory(install_dir) ~= 1 then
+		return reinstall("Directory missing")
+	end
+
+	---------------------------------------------------------------------------
+	-- 1. 先处理 tag 的变化（tag 优先级高于 branch）
+	--    规则：
+	--    - tag 改成新的值：在当前仓库上 fetch tags + checkout 新 tag
+	--    - tag 从有到无：删除仓库，重新 clone（不带 tag 参数）
+	---------------------------------------------------------------------------
+	if config_tag ~= yaml_tag then
+		if config_tag then
+			local cmd = string.format(
+				"cd %s && git fetch origin --tags && git checkout %s && git submodule update --init --recursive",
+				vim.fn.shellescape(install_dir),
+				config_tag
+			)
+			local job = git_utils.execute_command(cmd, function(ok, output)
+				if not ok then
+					return callback(false, output)
+				end
+
+				if is_main_plugin then
+					-- 记录新的 tag，branch 在 tag 模式下一般可以忽略
+					yaml_state.update_main_plugin(package_path, plugin_name, plugin_config, nil, config_tag, true)
+				end
+
+				callback(true, "Switched tag and updated")
+			end)
+			table.insert(jobs, job)
+			return
+		else
+			-- tag 被移除：删除目录并用“无 tag 参数”的方式重新克隆
+			local remove_cmd = string.format("rm -rf %s", vim.fn.shellescape(install_dir))
+			return git_utils.execute_command(remove_cmd, function(ok, err)
+				if not ok then
+					return callback(false, "Failed to remove plugin for tag removal: " .. (err or "Unknown error"))
+				end
+				reinstall("Tag removed, re-cloned without tag")
+			end)
+		end
+	end
+
+	---------------------------------------------------------------------------
+	-- 2. 再处理 branch 的变化（仅在没有 tag 模式下）
+	--    规则：
+	--    - clone_conf.branch 改成新的分支：当前仓库上 checkout 新分支 + pull
+	--    - clone_conf.branch 从有到无：删除仓库，重新 clone（不带 -b，走默认分支）
+	---------------------------------------------------------------------------
+	local function normalize_branch(branch)
 		if not branch or branch == "main" or branch == "master" then
 			return nil
 		end
 		return branch
 	end
-	
-	-- 检查 tag 变化
-	if config_tag ~= yaml_tag then
-		-- tag 从有到无，从无到有，或值改变
-		tag_changed = true
-	end
-	
-	-- 检查是否从 tag 切换到 branch 或从 branch 切换到 tag
-	local switched_from_tag_to_branch = (yaml_tag and not config_tag)
-	local switched_from_branch_to_tag = (not yaml_tag and config_tag)
-	
-	-- 检查 branch 变化（只有在没有 tag 的情况下才检查 branch）
-	if not config_tag and not yaml_tag then
-		local normalized_config_branch = normalize_branch(config_branch)
-		local normalized_yaml_branch = normalize_branch(yaml_branch)
-		
-		if normalized_config_branch ~= normalized_yaml_branch then
-			branch_changed = true
-		end
-	end
-	
-	-- 如果 tag 或 branch 有变化，或者从 tag 切换到 branch（或反之），删除插件并重新安装
-	if tag_changed or branch_changed or switched_from_tag_to_branch or switched_from_branch_to_tag then
-		-- 删除插件目录
-		if vim.fn.isdirectory(install_dir) == 1 then
-			local remove_cmd = string.format("rm -rf %s", vim.fn.shellescape(install_dir))
-			git_utils.execute_command(remove_cmd, function(remove_success, remove_err)
-				if not remove_success then
-					return callback(false, "Failed to remove plugin: " .. (remove_err or "Unknown error"))
+
+	local norm_cfg_branch = normalize_branch(config_branch)
+	local norm_yaml_branch = normalize_branch(yaml_branch)
+
+	if norm_cfg_branch ~= norm_yaml_branch then
+		if norm_cfg_branch then
+			-- 从 A -> B：切换分支再拉最新代码
+			local cmd = string.format(
+				"cd %s && git fetch origin && git checkout %s && git pull origin %s && git submodule update --init --recursive",
+				vim.fn.shellescape(install_dir),
+				norm_cfg_branch,
+				norm_cfg_branch
+			)
+			local job = git_utils.execute_command(cmd, function(ok, output)
+				if not ok then
+					return callback(false, output)
 				end
-				
-				-- 重新安装插件
-				local install_module = require("synapse.core.install")
-				local git_method = (config and config.method) or "https"
-				install_module.install_plugin(plugin_config, git_method, package_path, is_main_plugin, function(install_success, install_err)
-					if not install_success then
-						return callback(false, "Failed to reinstall plugin: " .. (install_err or "Unknown error"))
-					end
-					callback(true, "Reinstalled with new tag/branch")
-				end)
+
+				if is_main_plugin then
+					yaml_state.update_main_plugin(package_path, plugin_name, plugin_config, norm_cfg_branch, nil, true)
+				end
+
+				callback(true, "Switched branch and updated")
 			end)
+			table.insert(jobs, job)
+			return
 		else
-			-- 目录不存在，直接安装
-			local install_module = require("synapse.core.install")
-			local git_method = (config and config.method) or "https"
-			install_module.install_plugin(plugin_config, git_method, package_path, is_main_plugin, function(install_success, install_err)
-				if not install_success then
-					return callback(false, "Failed to install plugin: " .. (install_err or "Unknown error"))
+			-- branch 字段被移除：删除仓库，重新 clone（不带 -b）
+			local remove_cmd = string.format("rm -rf %s", vim.fn.shellescape(install_dir))
+			return git_utils.execute_command(remove_cmd, function(ok, err)
+				if not ok then
+					return callback(false, "Failed to remove plugin for branch removal: " .. (err or "Unknown error"))
 				end
-				callback(true, "Installed with new tag/branch")
+				reinstall("Branch removed, re-cloned with default branch")
 			end)
 		end
-		return
 	end
-	
-	-- 如果没有变化，执行常规更新
+
+	---------------------------------------------------------------------------
+	-- 3. tag 和 branch 都没变：普通更新
+	---------------------------------------------------------------------------
 	local cmd
 	if config_tag then
-		-- 如果配置中有 tag，checkout 到该 tag
-		cmd = string.format("cd %s && git fetch origin --tags && git checkout %s && git submodule update --init --recursive", 
-			vim.fn.shellescape(install_dir), config_tag)
+		-- 理论上不会到这里（上面已经处理 tag），保留以防逻辑调整
+		cmd = string.format(
+			"cd %s && git fetch origin --tags && git checkout %s && git submodule update --init --recursive",
+			vim.fn.shellescape(install_dir),
+			config_tag
+		)
 	else
-		-- 获取分支，如果没有配置分支就不使用分支参数
-		local branch = plugin_config and plugin_config.branch or yaml_branch
+		local branch = norm_cfg_branch or norm_yaml_branch
 		if branch then
-			-- 如果有 branch，更新到指定分支
-			cmd = string.format("cd %s && git fetch origin && git checkout %s && git pull origin %s && git submodule update --init --recursive", 
-				vim.fn.shellescape(install_dir), branch, branch)
+			cmd = string.format(
+				"cd %s && git fetch origin && git checkout %s && git pull origin %s && git submodule update --init --recursive",
+				vim.fn.shellescape(install_dir),
+				branch,
+				branch
+			)
 		else
-			-- 没有 branch，直接 pull
-			cmd = string.format("cd %s && git fetch origin && git pull origin && git submodule update --init --recursive", 
-				vim.fn.shellescape(install_dir))
+			cmd = string.format(
+				"cd %s && git fetch origin && git pull origin && git submodule update --init --recursive",
+				vim.fn.shellescape(install_dir)
+			)
 		end
 	end
 
@@ -612,39 +659,26 @@ function M.update_plugin(plugin, package_path, plugin_config, is_main_plugin, co
 			return callback(false, output)
 		end
 
-		-- Execute post-update commands if specified
-		-- 确保更新后如果有 execute 字段也要重新执行
 		local execute_cmds = plugin_config and plugin_config.execute or nil
+		local function finalize_ok()
+			if plugin_config and is_main_plugin then
+				local actual_branch = norm_cfg_branch or norm_yaml_branch
+				local actual_tag = config_tag or yaml_tag
+				yaml_state.update_main_plugin(package_path, plugin_name, plugin_config, actual_branch, actual_tag, true)
+			end
+			callback(true, "Success")
+		end
+
+		-- 更新后执行 execute
 		if execute_cmds and type(execute_cmds) == "table" and #execute_cmds > 0 then
 			execute_commands(execute_cmds, install_dir, function(exec_success, exec_err)
 				if not exec_success then
 					return callback(false, exec_err)
 				end
-
-				-- Update YAML if this is a main plugin（统一走 yaml_state）
-				if is_main_plugin then
-					local actual_branch = nil
-					local actual_tag = config_tag
-					if not config_tag then
-						actual_branch = plugin_config and plugin_config.branch or yaml_branch
-					end
-					yaml_state.update_main_plugin(package_path, plugin_name, plugin_config, actual_branch, actual_tag, true)
-				end
-
-				callback(true, "Success")
+				finalize_ok()
 			end)
 		else
-			-- Update YAML if this is a main plugin（统一走 yaml_state）
-			if plugin_config and is_main_plugin then
-				local actual_branch = nil
-				local actual_tag = config_tag
-				if not config_tag then
-					actual_branch = plugin_config and plugin_config.branch or yaml_branch
-				end
-				yaml_state.update_main_plugin(package_path, plugin_name, plugin_config, actual_branch, actual_tag, true)
-			end
-
-			callback(true, "Success")
+			finalize_ok()
 		end
 	end)
 	table.insert(jobs, job)
