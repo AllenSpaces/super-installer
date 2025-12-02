@@ -64,7 +64,7 @@ function M.start(config)
 		return
 	end
 
-		local function run_removal_queue(queue)
+	local function run_removal_queue(queue)
 		if not queue or #queue == 0 then
 			return
 		end
@@ -185,7 +185,7 @@ function M.start(config)
 					error_ui.save_error(plugin, err or "Removal failed")
 				end
 
-				-- 立即更新进度条
+				-- 立即更新进度条并启动下一个任务
 				if progress_win then
 					vim.schedule(function()
 						ui.update_progress(
@@ -195,11 +195,13 @@ function M.start(config)
 							total,
 							config.opts.ui
 						)
+						-- 尝试启动下一个任务（在 schedule 中确保立即执行）
+						start_next_removal()
 					end)
+				else
+					-- 如果没有进度窗口，直接启动下一个任务
+					start_next_removal()
 				end
-
-				-- 尝试启动下一个任务
-				start_next_removal()
 			end)
 			if job_id then
 				table.insert(jobs, job_id)

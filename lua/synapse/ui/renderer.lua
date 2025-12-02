@@ -111,24 +111,78 @@ function M.render_progress(win, ui)
 	-- Progress bar
 	if not state.state.show_failures then
 		local ratio = state.progress_ratio()
-		local progress_icon = "Progress"
-		local bar_width = math.max(10, math.min(content_width.value, inner_limit) - 6)
-		local filled = math.floor(bar_width * ratio)
-		local empty = math.max(0, bar_width - filled)
 		local glyph = ui.icons.progress.glyph or "■"
 		local glyph_bytes = #glyph
-		local bar = string.rep(glyph, filled) .. string.rep(glyph, empty)
-		local meta = string.format("%d/%d", state.state.completed, state.state.total)
-		local progress_content = string.format("%s %s %s", progress_icon, bar, meta)
-		push_line(line_specs, content_width, progress_content, {
+		local glyph_display_width = string_utils.display_width(glyph)
+		
+		-- Calculate percentage
+		local percentage = math.floor(ratio * 100)
+		local meta
+		if percentage < 10 then
+			-- 个位数：显示为 "01%"
+			meta = string.format("0%d%%", percentage)
+		else
+			-- 十位数及以上：显示为 "10%"
+			meta = string.format("%d%%", percentage)
+		end
+		local meta_display_width = string_utils.display_width(meta)
+		
+		-- Calculate base bar width
+		local base_bar_width = math.max(10, math.min(content_width.value, inner_limit) - 6)
+		
+		-- Calculate how many glyphs the percentage text occupies
+		-- Round up to ensure we have enough space
+		local meta_glyph_count = math.ceil(meta_display_width / glyph_display_width)
+		
+		-- If percentage is 10+ digits, reduce one glyph to make room
+		local bar_width = base_bar_width
+		if percentage >= 10 then
+			-- Reduce one glyph for 10+ digits
+			bar_width = math.max(1, bar_width - 1)
+		end
+		
+		-- Calculate where to insert percentage (middle of the bar)
+		local mid_point = math.floor(bar_width / 2)
+		local meta_start_glyph = math.max(0, mid_point - math.floor(meta_glyph_count / 2))
+		
+		-- Calculate filled and empty portions (in glyphs, excluding percentage area)
+		local total_filled_glyphs = math.floor(bar_width * ratio)
+		
+		-- Build progress bar with percentage in the middle
+		local bar_parts = {}
+		for i = 1, bar_width do
+			if i > meta_start_glyph and i <= meta_start_glyph + meta_glyph_count then
+				-- Insert percentage text at the middle position
+				if i == meta_start_glyph + 1 then
+					table.insert(bar_parts, meta)
+				end
+				-- Skip glyph positions occupied by percentage text
+			else
+				table.insert(bar_parts, glyph)
+			end
+		end
+		local bar = table.concat(bar_parts, "")
+		
+		-- Calculate filled portions for highlighting
+		-- Filled portion before percentage area
+		local filled_before = math.min(total_filled_glyphs, meta_start_glyph)
+		-- Filled portion after percentage area
+		local filled_after = math.max(0, total_filled_glyphs - (meta_start_glyph + meta_glyph_count))
+		
+		push_line(line_specs, content_width, bar, {
 			kind = "progress",
 			meta = {
-				filled = filled,
-				empty = empty,
-				label_len = string_utils.display_width(progress_icon .. " "),
-				label_bytes = #(progress_icon .. " "),
+				filled = total_filled_glyphs,
+				empty = bar_width - total_filled_glyphs,
+				filled_before = filled_before,
+				filled_after = filled_after,
+				meta_start_glyph = meta_start_glyph,
+				meta_glyph_count = meta_glyph_count,
+				meta_display_width = meta_display_width,
+				meta_bytes = #meta,
 				bar_width = bar_width,
 				glyph_bytes = glyph_bytes,
+				glyph_display_width = glyph_display_width,
 			},
 			align = "center",
 		})
@@ -262,40 +316,70 @@ function M.render_progress(win, ui)
 		local spec = line_specs[progress_line]
 		local meta = spec.meta or {}
 		local center_shift = spec.center_offset or 0
-		local label_bytes = meta.label_bytes or #("Progress ")
 		local glyph_bytes = meta.glyph_bytes or 1
 		local bar_width = meta.bar_width or 0
-		local filled = meta.filled or 0
+		local filled_before = meta.filled_before or 0
+		local filled_after = meta.filled_after or 0
+		local meta_start_glyph = meta.meta_start_glyph or 0
+		local meta_glyph_count = meta.meta_glyph_count or 0
+		local meta_bytes = meta.meta_bytes or 0
 
 		-- Calculate byte positions
-		local bar_start_col = side_padding + center_shift + label_bytes
-		local bar_total_bytes = bar_width * glyph_bytes
-		local filled_bytes = filled * glyph_bytes
+		local bar_start_col = side_padding + center_shift
+		local meta_start_col = bar_start_col + meta_start_glyph * glyph_bytes
+		local meta_end_col = meta_start_col + meta_bytes
+		local bar_end_col = bar_start_col + (bar_width - meta_glyph_count) * glyph_bytes + meta_bytes
 
 		local default_hl = state.state.progress_hl.default
 		local progress_hl = state.state.progress_hl.progress
 
 		-- Step 1: Initialize entire bar with default color (gray)
-		if bar_total_bytes > 0 then
+		-- Before percentage
+		if meta_start_glyph > 0 then
 			api.nvim_buf_add_highlight(
 				win.buf,
 				namespace,
 				default_hl,
 				line,
 				bar_start_col,
-				bar_start_col + bar_total_bytes
+				meta_start_col
+			)
+		end
+		-- After percentage
+		if meta_end_col < bar_end_col then
+			api.nvim_buf_add_highlight(
+				win.buf,
+				namespace,
+				default_hl,
+				line,
+				meta_end_col,
+				bar_end_col
 			)
 		end
 
 		-- Step 2: Override filled portion with progress color
-		if filled_bytes > 0 and filled_bytes <= bar_total_bytes then
+		-- Filled portion before percentage
+		if filled_before > 0 then
+			local filled_before_bytes = filled_before * glyph_bytes
 			api.nvim_buf_add_highlight(
 				win.buf,
 				namespace,
 				progress_hl,
 				line,
 				bar_start_col,
-				bar_start_col + filled_bytes
+				bar_start_col + filled_before_bytes
+			)
+		end
+		-- Filled portion after percentage
+		if filled_after > 0 then
+			local filled_after_bytes = filled_after * glyph_bytes
+			api.nvim_buf_add_highlight(
+				win.buf,
+				namespace,
+				progress_hl,
+				line,
+				meta_end_col,
+				meta_end_col + filled_after_bytes
 			)
 		end
 	end

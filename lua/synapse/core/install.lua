@@ -310,7 +310,7 @@ function M.start(config)
 					error_ui.save_error(display_name, err or "Installation failed")
 				end
 
-				-- 立即更新进度条
+				-- 立即更新进度条并启动下一个任务
 				vim.schedule(function()
 					ui.update_progress(
 						progress_win,
@@ -319,10 +319,9 @@ function M.start(config)
 						total,
 						config.opts.ui
 					)
+					-- 尝试启动下一个任务（在 schedule 中确保立即执行）
+					start_next_task()
 				end)
-
-				-- 尝试启动下一个任务
-				start_next_task()
 			end)
 			if job_id then
 				table.insert(jobs, job_id)

@@ -295,9 +295,9 @@ function M.start(config)
 								total,
 								config.opts.ui
 							)
+							-- 尝试启动下一个任务（在 schedule 中确保立即执行）
+							start_next_task()
 						end)
-						-- 尝试启动下一个任务
-						start_next_task()
 						return
 					end
 
@@ -311,6 +311,7 @@ function M.start(config)
 							is_main_plugin,
 							config,
 							function(ok2, err2)
+								running_count = running_count - 1
 								if ok2 then
 									success_count = success_count + 1
 									completed = completed + 1
@@ -322,6 +323,8 @@ function M.start(config)
 											total,
 											config.opts.ui
 										)
+										-- 尝试启动下一个任务（在 schedule 中确保立即执行）
+										start_next_task()
 									end)
 								else
 									table.insert(errors, { plugin = display_name, error = err2, repo = repo })
@@ -335,10 +338,10 @@ function M.start(config)
 											total,
 											config.opts.ui
 										)
+										-- 尝试启动下一个任务（在 schedule 中确保立即执行）
+										start_next_task()
 									end)
 								end
-								running_count = running_count - 1
-								start_next_task()
 							end
 						)
 					else
@@ -354,8 +357,9 @@ function M.start(config)
 								total,
 								config.opts.ui
 							)
+							-- 尝试启动下一个任务（在 schedule 中确保立即执行）
+							start_next_task()
 						end)
-						start_next_task()
 					end
 				end)
 			end
