@@ -3,18 +3,18 @@
 --- @return table
 local function scan_config_files(config_path)
 	local configs = {}
-	
+
 	if not config_path or config_path == "" then
 		return configs
 	end
-	
+
 	if vim.fn.isdirectory(config_path) ~= 1 then
 		return configs
 	end
-	
+
 	-- Recursively get all .config.lua files
 	local files = vim.fn.globpath(config_path, "**/*.config.lua", true, true)
-	
+
 	for _, file in ipairs(files) do
 		if file ~= "" then
 			-- Get relative path from config_path
@@ -23,7 +23,7 @@ local function scan_config_files(config_path)
 			table.insert(configs, { name = module_name, file_path = file, enabled = true })
 		end
 	end
-	
+
 	return configs
 end
 
@@ -69,11 +69,11 @@ local function load_dependency_opt(repo, opt)
 	if not repo or not opt or type(opt) ~= "table" then
 		return
 	end
-	
+
 	-- Extract plugin name from repo (e.g., "nvim-lua/plenary.nvim" -> "plenary")
 	local plugin_name = repo:match("([^/]+)$")
 	plugin_name = plugin_name:gsub("%.git$", ""):gsub("%.nvim$", ""):gsub("%-nvim$", "")
-	
+
 	-- Try to require and setup the plugin
 	local ok, plugin = pcall(require, plugin_name)
 	if ok and plugin and plugin.setup then
@@ -106,7 +106,7 @@ local function extract_plugin_name(mod, module_name, file_path)
 	if mod and mod.repo and type(mod.repo) == "string" then
 		return string_utils.get_plugin_name(mod.repo)
 	end
-	
+
 	-- Try to extract from module name
 	-- Examples:
 	--   "pkgs.snips.config" -> "snips"
@@ -116,12 +116,12 @@ local function extract_plugin_name(mod, module_name, file_path)
 	for part in module_name:gmatch("([^%.]+)") do
 		table.insert(parts, part)
 	end
-	
+
 	-- Remove "config" suffix if present
 	if #parts > 0 and parts[#parts] == "config" then
 		table.remove(parts)
 	end
-	
+
 	-- Get the last part as plugin name
 	if #parts > 0 then
 		local name = parts[#parts]
@@ -129,7 +129,7 @@ local function extract_plugin_name(mod, module_name, file_path)
 			return name
 		end
 	end
-	
+
 	-- Try from file path
 	if file_path then
 		local basename = vim.fn.fnamemodify(file_path, ":t:r")
@@ -138,8 +138,86 @@ local function extract_plugin_name(mod, module_name, file_path)
 			return name
 		end
 	end
-	
+
 	return nil
+end
+
+--- Create a package wrapper function that handles recursive require paths
+--- Supports both old style (package.mock_nvim_web_devicons()) and new style (package({ "install" }))
+--- @param base_name string Base plugin name (e.g., "nvim-treesitter")
+--- @return table Package wrapper (function + plugin module)
+local function create_package_wrapper(base_name)
+	local plugin_module = require(base_name)
+
+	-- Create wrapper function
+	local wrapper_func = function(paths)
+		-- New style: package({ "install" }) or package({ "install" = { "log" }})
+		if paths and type(paths) == "table" then
+			-- Handle array format: {"install"} -> "plugin.install"
+			if #paths > 0 then
+				local path_parts = {}
+				for _, part in ipairs(paths) do
+					table.insert(path_parts, tostring(part))
+				end
+				local full_path = base_name .. "." .. table.concat(path_parts, ".")
+				return require(full_path)
+			end
+
+			-- Handle table format: {install = {"log"}} -> "plugin.install.log"
+			-- Recursively build the path
+			local function build_path(tbl, current_path)
+				local paths_list = {}
+
+				for key, value in pairs(tbl) do
+					local new_path = current_path .. "." .. tostring(key)
+
+					if type(value) == "table" and next(value) ~= nil then
+						-- Check if it's an array
+						if #value > 0 then
+							-- Array format: {install = {"log"}} -> "plugin.install.log"
+							local path_parts = { new_path }
+							for _, part in ipairs(value) do
+								table.insert(path_parts, tostring(part))
+							end
+							table.insert(paths_list, table.concat(path_parts, "."))
+						else
+							-- Recursive case: nested table
+							local nested_paths = build_path(value, new_path)
+							for _, path in ipairs(nested_paths) do
+								table.insert(paths_list, path)
+							end
+						end
+					else
+						-- Base case: just the path
+						table.insert(paths_list, new_path)
+					end
+				end
+
+				return paths_list
+			end
+
+			local path_list = build_path(paths, base_name)
+			if #path_list > 0 then
+				-- Return the first path
+				return require(path_list[1])
+			end
+		end
+
+		-- No arguments: return base module (for new style without args)
+		return plugin_module
+	end
+
+	-- Create wrapper table that can be called as function and accessed as table
+	local wrapper = {}
+
+	-- Set metatable to allow method calls on wrapper
+	-- This allows old style: package.mock_nvim_web_devicons()
+	setmetatable(wrapper, {
+		__index = plugin_module, -- Allow accessing plugin methods/properties
+		__call = wrapper_func, -- Allow calling as function: package({ "install" })
+	})
+
+	return wrapper
 end
 
 --- Execute config function for a module
@@ -149,12 +227,12 @@ local function execute_config(module, immediate)
 	if not module.enabled then
 		return
 	end
-	
+
 	local mod = safe_require(module.name, module.file_path)
 	if not mod then
 		return
 	end
-	
+
 	-- Support config as table: directly call plugin.setup(config)
 	if mod.config and type(mod.config) == "table" then
 		local plugin_name = extract_plugin_name(mod, module.name, module.file_path)
@@ -166,25 +244,39 @@ local function execute_config(module, immediate)
 			)
 			return
 		end
-		
+
 		-- Try multiple possible plugin names
 		local possible_names = { plugin_name }
-		
+
 		-- If plugin_name contains uppercase, also try lowercase version
 		if plugin_name:match("%u") then
 			table.insert(possible_names, plugin_name:lower())
 		end
-		
+
 		-- If plugin_name ends with -nvim or .nvim, try without it
 		local base_name = plugin_name:gsub("%-nvim$", ""):gsub("%.nvim$", "")
 		if base_name ~= plugin_name then
 			table.insert(possible_names, base_name)
 		end
-		
+
 		local setup_success = false
 		for _, name in ipairs(possible_names) do
 			local ok, plugin = pcall(require, name)
 			if ok and plugin then
+				-- Call initialization function if it exists, before setup
+				if mod.initialization and type(mod.initialization) == "function" then
+					-- Create package wrapper function for recursive require paths
+					local package_wrapper = create_package_wrapper(name)
+					local init_ok, init_err = pcall(mod.initialization, package_wrapper)
+					if not init_ok then
+						vim.notify(
+							"Error executing initialization for " .. name .. ": " .. tostring(init_err),
+							vim.log.levels.WARN,
+							{ title = "Synapse" }
+						)
+					end
+				end
+
 				if plugin.setup then
 					local setup_ok, setup_err = pcall(plugin.setup, mod.config)
 					if setup_ok then
@@ -206,20 +298,56 @@ local function execute_config(module, immediate)
 				end
 			end
 		end
-		
+
 		if not setup_success then
 			vim.notify(
-				"Failed to setup plugin for " .. module.name .. " (tried: " .. table.concat(possible_names, ", ") .. "). Plugin may not be installed yet.",
+				"Failed to setup plugin for " ..
+				module.name .. " (tried: " .. table.concat(possible_names, ", ") .. "). Plugin may not be installed yet.",
 				vim.log.levels.WARN,
 				{ title = "Synapse" }
 			)
 		end
-		
+
 		return
 	end
-	
+
 	-- Support config as function (original behavior)
 	if mod.config and type(mod.config) == "function" then
+		-- Call initialization function if it exists, before config
+		if mod.initialization and type(mod.initialization) == "function" then
+			-- Try to extract plugin name and require it
+			local plugin_name = extract_plugin_name(mod, module.name, module.file_path)
+			if plugin_name then
+				-- Try multiple possible plugin names
+				local possible_names = { plugin_name }
+				if plugin_name:match("%u") then
+					table.insert(possible_names, plugin_name:lower())
+				end
+				local base_name = plugin_name:gsub("%-nvim$", ""):gsub("%.nvim$", "")
+				if base_name ~= plugin_name then
+					table.insert(possible_names, base_name)
+				end
+
+				-- Try to require plugin and call initialization
+				for _, name in ipairs(possible_names) do
+					local ok, plugin = pcall(require, name)
+					if ok and plugin then
+						-- Create package wrapper function for recursive require paths
+						local package_wrapper = create_package_wrapper(name)
+						local init_ok, init_err = pcall(mod.initialization, package_wrapper)
+						if not init_ok then
+							vim.notify(
+								"Error executing initialization for " .. name .. ": " .. tostring(init_err),
+								vim.log.levels.WARN,
+								{ title = "Synapse" }
+							)
+						end
+						break
+					end
+				end
+			end
+		end
+
 		-- If immediate is true, skip lazy loading and execute immediately
 		if immediate then
 			local ok, err = pcall(mod.config)
@@ -283,32 +411,32 @@ function M.load_config(config_path, config_files_path)
 	if not config_path then
 		return
 	end
-	
+
 	-- Handle both string and table formats
 	local path = config_path
-	
+
 	if type(config_path) == "table" then
 		path = config_path.path
 	end
-	
+
 	-- If path is not set, use default config directory
 	if not path or path == "" then
 		path = vim.fn.stdpath("config") .. "/lua"
 	end
-	
+
 	-- Normalize path
 	path = vim.fn.fnamemodify(path, ":p")
 	path = path:gsub("/$", "") -- Remove trailing slash
-	
+
 	-- Step 1: Scan and load all .config.lua files first
 	-- This ensures main plugins are set up before their dependencies
 	local config_modules = scan_config_files(path)
-	
+
 	-- Load all modules (main plugin configurations)
 	for _, module in ipairs(config_modules) do
 		execute_config(module)
 	end
-	
+
 	-- Step 2: Load dependency opt configurations from config files
 	-- This happens after main plugins are set up, so dependencies can safely use them
 	if config_files_path then
@@ -327,4 +455,3 @@ function M.load_config(config_path, config_files_path)
 end
 
 return M
-
