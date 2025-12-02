@@ -64,15 +64,22 @@ local M = {}
 
 --- Load dependency opt configuration
 --- @param repo string Plugin repository path
+--- @param primary string|nil Primary plugin name
 --- @param opt table Configuration table
-local function load_dependency_opt(repo, opt)
+local function load_dependency_opt(repo, primary, opt)
 	if not repo or not opt or type(opt) ~= "table" then
 		return
 	end
 
-	-- Extract plugin name from repo (e.g., "nvim-lua/plenary.nvim" -> "plenary")
-	local plugin_name = repo:match("([^/]+)$")
-	plugin_name = plugin_name:gsub("%.git$", ""):gsub("%.nvim$", ""):gsub("%-nvim$", "")
+	-- Extract plugin name: use primary parameter if available, otherwise extract from repo
+	local plugin_name = nil
+	if primary and type(primary) == "string" and primary ~= "" then
+		plugin_name = primary
+	else
+		-- Extract plugin name from repo (e.g., "nvim-lua/plenary.nvim" -> "plenary")
+		plugin_name = repo:match("([^/]+)$")
+		plugin_name = plugin_name:gsub("%.git$", ""):gsub("%.nvim$", ""):gsub("%-nvim$", "")
+	end
 
 	-- Try to require and setup the plugin
 	local ok, plugin = pcall(require, plugin_name)
@@ -97,12 +104,17 @@ local function load_dependency_opt(repo, opt)
 end
 
 --- Extract plugin name from module, repo, module name or file path
---- @param mod table Module table (may contain repo field)
+--- @param mod table Module table (may contain repo, primary field)
 --- @param module_name string Module name (e.g., "pkgs.snips.config")
 --- @param file_path string File path
 --- @return string|nil Plugin name
 local function extract_plugin_name(mod, module_name, file_path)
-	-- First, try to extract from repo field if available
+	-- First, check for primary field (highest priority)
+	if mod and mod.primary and type(mod.primary) == "string" and mod.primary ~= "" then
+		return mod.primary
+	end
+	
+	-- Second, try to extract from repo field if available
 	if mod and mod.repo and type(mod.repo) == "string" then
 		return string_utils.get_plugin_name(mod.repo)
 	end
@@ -222,8 +234,7 @@ end
 
 --- Execute config function for a module
 --- @param module table Module information
---- @param immediate boolean If true, execute immediately even if loaded is set
-local function execute_config(module, immediate)
+local function execute_config(module)
 	if not module.enabled then
 		return
 	end
@@ -245,18 +256,25 @@ local function execute_config(module, immediate)
 			return
 		end
 
-		-- Try multiple possible plugin names
-		local possible_names = { plugin_name }
+		-- If primary field is specified, use it directly without trying variations
+		local possible_names = {}
+		if mod.primary and type(mod.primary) == "string" and mod.primary ~= "" then
+			-- Use primary field directly
+			table.insert(possible_names, mod.primary)
+		else
+			-- Try multiple possible plugin names
+			table.insert(possible_names, plugin_name)
 
-		-- If plugin_name contains uppercase, also try lowercase version
-		if plugin_name:match("%u") then
-			table.insert(possible_names, plugin_name:lower())
-		end
+			-- If plugin_name contains uppercase, also try lowercase version
+			if plugin_name:match("%u") then
+				table.insert(possible_names, plugin_name:lower())
+			end
 
-		-- If plugin_name ends with -nvim or .nvim, try without it
-		local base_name = plugin_name:gsub("%-nvim$", ""):gsub("%.nvim$", "")
-		if base_name ~= plugin_name then
-			table.insert(possible_names, base_name)
+			-- If plugin_name ends with -nvim or .nvim, try without it
+			local base_name = plugin_name:gsub("%-nvim$", ""):gsub("%.nvim$", "")
+			if base_name ~= plugin_name then
+				table.insert(possible_names, base_name)
+			end
 		end
 
 		local setup_success = false
@@ -318,14 +336,21 @@ local function execute_config(module, immediate)
 			-- Try to extract plugin name and require it
 			local plugin_name = extract_plugin_name(mod, module.name, module.file_path)
 			if plugin_name then
-				-- Try multiple possible plugin names
-				local possible_names = { plugin_name }
-				if plugin_name:match("%u") then
-					table.insert(possible_names, plugin_name:lower())
-				end
-				local base_name = plugin_name:gsub("%-nvim$", ""):gsub("%.nvim$", "")
-				if base_name ~= plugin_name then
-					table.insert(possible_names, base_name)
+				-- If primary field is specified, use it directly without trying variations
+				local possible_names = {}
+				if mod.primary and type(mod.primary) == "string" and mod.primary ~= "" then
+					-- Use primary field directly
+					table.insert(possible_names, mod.primary)
+				else
+					-- Try multiple possible plugin names
+					table.insert(possible_names, plugin_name)
+					if plugin_name:match("%u") then
+						table.insert(possible_names, plugin_name:lower())
+					end
+					local base_name = plugin_name:gsub("%-nvim$", ""):gsub("%.nvim$", "")
+					if base_name ~= plugin_name then
+						table.insert(possible_names, base_name)
+					end
 				end
 
 				-- Try to require plugin and call initialization
@@ -348,58 +373,14 @@ local function execute_config(module, immediate)
 			end
 		end
 
-		-- If immediate is true, skip lazy loading and execute immediately
-		if immediate then
-			local ok, err = pcall(mod.config)
-			if not ok then
-				vim.notify(
-					"Error executing config for " .. module.name .. ": " .. tostring(err),
-					vim.log.levels.WARN,
-					{ title = "Synapse" }
-				)
-			end
-		elseif mod.loaded then
-			if mod.loaded.event and #mod.loaded.event > 0 then
-				vim.api.nvim_create_autocmd(mod.loaded.event, {
-					group = vim.api.nvim_create_augroup(module.name, { clear = true }),
-					once = true,
-					callback = function()
-						local ok, err = pcall(mod.config)
-						if not ok then
-							vim.notify(
-								"Error executing config for " .. module.name .. ": " .. tostring(err),
-								vim.log.levels.WARN,
-								{ title = "Synapse" }
-							)
-						end
-					end,
-				})
-			elseif mod.loaded.ft and #mod.loaded.ft > 0 then
-				vim.api.nvim_create_autocmd("FileType", {
-					group = vim.api.nvim_create_augroup(module.name, { clear = true }),
-					pattern = mod.loaded.ft,
-					callback = function()
-						local ok, err = pcall(mod.config)
-						if not ok then
-							vim.notify(
-								"Error executing config for " .. module.name .. ": " .. tostring(err),
-								vim.log.levels.WARN,
-								{ title = "Synapse" }
-							)
-						end
-					end,
-				})
-			end
-		else
-			-- Execute config function safely
-			local ok, err = pcall(mod.config)
-			if not ok then
-				vim.notify(
-					"Error executing config for " .. module.name .. ": " .. tostring(err),
-					vim.log.levels.WARN,
-					{ title = "Synapse" }
-				)
-			end
+		-- Execute config function safely
+		local ok, err = pcall(mod.config)
+		if not ok then
+			vim.notify(
+				"Error executing config for " .. module.name .. ": " .. tostring(err),
+				vim.log.levels.WARN,
+				{ title = "Synapse" }
+			)
 		end
 	end
 end
@@ -444,9 +425,9 @@ function M.load_config(config_path, config_files_path)
 		for _, plugin_config in ipairs(configs) do
 			if plugin_config.depend and type(plugin_config.depend) == "table" then
 				for _, dep_item in ipairs(plugin_config.depend) do
-					local dep_repo, dep_opt = config_utils.parse_dependency(dep_item)
+					local dep_repo, dep_primary, dep_opt = config_utils.parse_dependency(dep_item)
 					if dep_repo and dep_opt then
-						load_dependency_opt(dep_repo, dep_opt)
+						load_dependency_opt(dep_repo, dep_primary, dep_opt)
 					end
 				end
 			end

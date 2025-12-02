@@ -131,7 +131,8 @@ automatically loaded:
     })
 <
 
-Example: Create `~/.config/nvim/lua/plugins/example.config.lua`:
+Example: Create `~/.config/nvim/lua/plugins/example.config.lua` (or in any
+subdirectory):
 
 Method 1 - config as table (automatically calls plugin.setup(config)): ~
 >
@@ -163,9 +164,42 @@ Method 2 - config as function (manual setup): ~
 <
 
 Note: When `config` is a table, Synapse will automatically:
-    1. Extract the plugin name from the `repo` field
+    1. Extract the plugin name from the `repo` field (or use `primary` if specified)
     2. Try to `require` the plugin
     3. Call `plugin.setup(config_table)` if the plugin has a `setup` function
+
+Additional Configuration Options: ~
+
+`primary` field: ~
+    Specify the actual require name if it differs from the extracted name:
+>
+    return {
+        repo = "username/plugin-name",
+        primary = "custom-plugin-name",  -- Use this as require name
+        config = {
+            option1 = "value1",
+        },
+    }
+<
+
+`initialization` field: ~
+    Execute a function before plugin setup. The function receives a package
+    wrapper that allows accessing plugin submodules:
+>
+    return {
+        repo = "username/plugin-name",
+        initialization = function(package)
+            -- package is a wrapper that allows accessing plugin submodules
+            -- Access submodules using: package({ "submodule", "path" })
+            -- Or using method calls: package.submodule()
+            -- This runs before plugin.setup() is called
+        end,
+        config = {
+            option1 = "value1",
+        },
+    }
+<
+
 
 4.3 Plugin Installation Configuration Format ~
 
@@ -192,6 +226,17 @@ Basic Format: ~
                     option2 = "value2",
                 }
             },
+            
+            -- Table format with primary and opt (same level)
+            {
+                "username/third-dependency",
+                primary = "custom-dep-name",  -- Specify require name
+                opt = {
+                    -- Configuration options for the dependency
+                    option1 = "value1",
+                    option2 = "value2",
+                }
+            },
         },
         
         -- Tag version (optional, takes precedence over branch)
@@ -208,6 +253,10 @@ Basic Format: ~
             "cargo build --release",
         },  -- Or use a single string: execute = "make"
         
+        -- Primary plugin name (optional)
+        -- Use this if the require name differs from the extracted name
+        primary = "custom-plugin-name",
+        
         -- Plugin configuration (optional)
         -- Method 1: config as table (automatically calls plugin.setup(config))
         config = {
@@ -219,6 +268,13 @@ Basic Format: ~
         -- config = function()
         --     require("plugin-name").setup({})
         -- end,
+        
+        -- Initialization function (optional)
+        -- Executed before plugin.setup() is called
+        -- initialization = function(package)
+        --     -- package is a wrapper for accessing plugin submodules
+        -- end,
+        
     }
 <
 
@@ -293,6 +349,53 @@ Example 4 - Post-Install Commands: ~
         execute = {
             "make",
             "cargo build --release",
+        },
+    }
+<
+
+Example 5 - Using primary field: ~
+>
+    -- config_path/custom-name.lua
+    return {
+        repo = "username/plugin-name",
+        primary = "custom-plugin-name",  -- Use this as require name
+        config = {
+            option1 = "value1",
+        },
+    }
+<
+
+Example 6 - With initialization function: ~
+>
+    -- config_path/with-init.lua
+    return {
+        repo = "username/plugin-name",
+        initialization = function(package)
+            -- Access plugin submodules before setup
+            local install = package({ "install" })
+            -- Or: local install = package.install()
+        end,
+        config = {
+            option1 = "value1",
+        },
+    }
+<
+
+
+Example 7 - Dependency with primary field: ~
+>
+    -- config_path/mason.lua
+    return {
+        repo = "williamboman/mason.nvim",
+        depend = {
+            {
+                "williamboman/mason-lspconfig.nvim",
+                primary = "mason-lspconfig",  -- Specify require name
+                opt = {
+                    ensure_installed = { "lua_ls", "pyright" },
+                    automatic_installation = true,
+                }
+            },
         },
     }
 <
@@ -376,6 +479,25 @@ Loading Order: ~
 This ensures that if `plugin-a` depends on `plugin-b`, and both have
 configurations, `plugin-b` will be set up before `plugin-a`'s dependency
 configuration is applied.
+
+Plugin Name Resolution: ~
+
+Synapse automatically extracts plugin names from the `repo` field, but you
+can override this using the `primary` field. The resolution order is:
+
+1. `primary` field (if specified) - highest priority
+2. Extract from `repo` field (e.g., "user/plugin-name" -> "plugin-name")
+3. Extract from module name (e.g., "pkgs.plugin.config" -> "plugin")
+4. Extract from file path
+
+If `primary` is not specified, Synapse will try multiple variations when
+requiring the plugin:
+    • Original extracted name
+    • Lowercase version (if contains uppercase)
+    • Without "-nvim" or ".nvim" suffix
+
+This helps handle different plugin naming conventions automatically.
+
 
 ==============================================================================
 TROUBLESHOOTING                                    *synapse-troubleshooting*

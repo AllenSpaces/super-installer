@@ -1,21 +1,23 @@
 local M = {}
 
 --- Parse a dependency item (supports both string and table formats)
---- @param dep string|table Dependency item (string: "user/repo", table: { "user/repo", opt = {...} })
+--- @param dep string|table Dependency item (string: "user/repo", table: { "user/repo", primary = "...", opt = {...} })
 --- @return string repo Repository path
+--- @return string|nil primary Primary plugin name
 --- @return table|nil opt Optional configuration table
 function M.parse_dependency(dep)
 	if type(dep) == "string" then
-		return dep, nil
+		return dep, nil, nil
 	elseif type(dep) == "table" then
-		-- Support format: { "user/repo", opt = {...} }
+		-- Support format: { "user/repo", primary = "...", opt = {...} }
 		local repo = dep[1]
+		local primary = dep.primary
 		local opt = dep.opt
 		if type(repo) == "string" then
-			return repo, opt
+			return repo, primary, opt
 		end
 	end
-	return nil, nil
+	return nil, nil, nil
 end
 
 --- Remove duplicates from a table
@@ -126,11 +128,18 @@ function M.load_config_files(config_path)
 					-- Extract dependencies if depend field exists
 					if config.depend and type(config.depend) == "table" then
 						for _, dep in ipairs(config.depend) do
-							local repo, opt = M.parse_dependency(dep)
+							local repo, primary, opt = M.parse_dependency(dep)
 							if repo and repo ~= "" then
-								-- Store as table format: { repo, opt = opt }
-								if opt then
-									table.insert(plugin_config.depend, { repo, opt = opt })
+								-- Store as table format: { repo, primary = primary, opt = opt }
+								if primary or opt then
+									local dep_item = { repo }
+									if primary then
+										dep_item.primary = primary
+									end
+									if opt then
+										dep_item.opt = opt
+									end
+									table.insert(plugin_config.depend, dep_item)
 								else
 									-- Keep string format for backward compatibility
 									table.insert(plugin_config.depend, repo)
