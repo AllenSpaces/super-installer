@@ -151,6 +151,25 @@ function M.start(config)
 		end
 	end
 	
+	-- 建立依赖项到主插件的映射（用于安装依赖项时更新主插件的 yaml）
+	local dep_to_main_plugins = {} -- dep_repo -> {main_plugin_repo1, main_plugin_repo2, ...}
+	for _, plugin_config in ipairs(configs) do
+		if plugin_config.repo and plugin_config.depend and type(plugin_config.depend) == "table" then
+			for _, dep_item in ipairs(plugin_config.depend) do
+				local dep_repo = config_utils.parse_dependency(dep_item)
+				if dep_repo then
+					if not dep_to_main_plugins[dep_repo] then
+						dep_to_main_plugins[dep_repo] = {}
+					end
+					-- 只有当依赖项不是主插件时，才记录它所属的主插件
+					if not main_plugin_repos[dep_repo] then
+						table.insert(dep_to_main_plugins[dep_repo], plugin_config.repo)
+					end
+				end
+			end
+		end
+	end
+	
 	-- 转换为列表并过滤已安装的插件，确保依赖项在主插件之前安装
 	local pending_install = {}
 	local dependencies = {}
@@ -297,7 +316,13 @@ function M.start(config)
 				ui.update_progress(progress_win, { plugin = display_name, status = "active" }, completed, total, config.opts.ui)
 			end)
 
-			local job_id = M.install_plugin(plugin_config, config.method, config.opts.package_path, is_main_plugin, function(success, err)
+			-- 获取依赖项所属的主插件列表
+			local parent_main_plugins = nil
+			if not is_main_plugin then
+				parent_main_plugins = dep_to_main_plugins[plugin_config.repo] or {}
+			end
+			
+			local job_id = M.install_plugin(plugin_config, config.method, config.opts.package_path, is_main_plugin, parent_main_plugins, function(success, err)
 				running_count = running_count - 1
 				completed = completed + 1
 
@@ -339,7 +364,7 @@ end
 
 -- YAML metadata helpers are centralized in synapse.utils.yaml_state
 
-function M.install_plugin(plugin_config, git_config, package_path, is_main_plugin, callback)
+function M.install_plugin(plugin_config, git_config, package_path, is_main_plugin, parent_main_plugins, callback)
 	if not installation_active then
 		return
 	end
@@ -414,15 +439,33 @@ function M.install_plugin(plugin_config, git_config, package_path, is_main_plugi
 					return callback(false, exec_err)
 				end
 
-				-- Update synapse.yaml on successful installation (only for main plugins)
-				-- Pass the actual branch and tag used for installation
-				yaml_state.update_main_plugin(package_path, plugin_name, plugin_config, branch, tag, is_main_plugin)
+				-- Update synapse.yaml on successful installation
+				if is_main_plugin then
+					-- 主插件：直接更新
+					yaml_state.update_main_plugin(package_path, plugin_name, plugin_config, branch, tag, true)
+				elseif parent_main_plugins and #parent_main_plugins > 0 then
+					-- 依赖项：更新所有包含它的主插件的 depend 字段
+					for _, main_repo in ipairs(parent_main_plugins) do
+						local main_plugin_name = main_repo:match("([^/]+)$")
+						main_plugin_name = main_plugin_name:gsub("%.git$", "")
+						yaml_state.add_dependency_to_main_plugin(package_path, main_plugin_name, plugin_config.repo)
+					end
+				end
 				callback(true, nil)
 			end)
 		else
-			-- Update synapse.yaml on successful installation (only for main plugins)
-			-- Pass the actual branch and tag used for installation
-			yaml_state.update_main_plugin(package_path, plugin_name, plugin_config, branch, tag, is_main_plugin)
+			-- Update synapse.yaml on successful installation
+			if is_main_plugin then
+				-- 主插件：直接更新
+				yaml_state.update_main_plugin(package_path, plugin_name, plugin_config, branch, tag, true)
+			elseif parent_main_plugins and #parent_main_plugins > 0 then
+				-- 依赖项：更新所有包含它的主插件的 depend 字段
+				for _, main_repo in ipairs(parent_main_plugins) do
+					local main_plugin_name = main_repo:match("([^/]+)$")
+					main_plugin_name = main_plugin_name:gsub("%.git$", "")
+					yaml_state.add_dependency_to_main_plugin(package_path, main_plugin_name, plugin_config.repo)
+				end
+			end
 			callback(true, nil)
 		end
 	end)

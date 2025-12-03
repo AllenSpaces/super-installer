@@ -59,7 +59,39 @@ function M.start(config)
 		end
 	end
 
+	-- 即使没有需要删除的插件，也要更新 yaml 中的 depend 字段
+	local function update_all_main_plugins_yaml()
+		for _, plugin_config in ipairs(configs) do
+			if plugin_config.repo then
+				local plugin_name = plugin_config.repo:match("([^/]+)$")
+				plugin_name = plugin_name:gsub("%.git$", "")
+				local install_dir = git_utils.get_install_dir(plugin_name, "start", config.opts.package_path)
+				
+				-- 只更新已安装的主插件
+				if vim.fn.isdirectory(install_dir) == 1 then
+					-- 从 yaml 获取当前的 branch 和 tag（如果存在）
+					local yaml_branch, yaml_tag = yaml_state.get_branch_tag(config.opts.package_path, plugin_name)
+					-- 使用配置中的 branch 和 tag，如果配置中没有则使用 yaml 中的
+					local actual_branch = plugin_config.branch or yaml_branch
+					local actual_tag = plugin_config.tag or yaml_tag
+					
+					-- 更新 yaml 记录（这会同步 depend 字段）
+					yaml_state.update_main_plugin(
+						config.opts.package_path,
+						plugin_name,
+						plugin_config,
+						actual_branch,
+						actual_tag,
+						true
+					)
+				end
+			end
+		end
+	end
+
 	if #removal_candidates == 0 then
+		-- 即使没有需要删除的插件，也更新 yaml
+		update_all_main_plugins_yaml()
 		ui.log_message("No unused plugins found.")
 		return
 	end
@@ -71,6 +103,10 @@ function M.start(config)
 
 		cleanup_active = true
 		jobs = {}
+		
+		-- 保存 configs 和 config 的引用，供 finalize 使用
+		local saved_configs = configs
+		local saved_config = config
 
 		local progress_win = nil
 		if #queue > 1 then
@@ -110,10 +146,38 @@ function M.start(config)
 				return
 			end
 
+			-- 在卸载完成后，更新所有主插件的 yaml 记录（同步 depend 字段）
+			for _, plugin_config in ipairs(saved_configs) do
+				if plugin_config.repo then
+					local plugin_name = plugin_config.repo:match("([^/]+)$")
+					plugin_name = plugin_name:gsub("%.git$", "")
+					local install_dir = git_utils.get_install_dir(plugin_name, "start", saved_config.opts.package_path)
+					
+					-- 只更新已安装的主插件
+					if vim.fn.isdirectory(install_dir) == 1 then
+						-- 从 yaml 获取当前的 branch 和 tag（如果存在）
+						local yaml_branch, yaml_tag = yaml_state.get_branch_tag(saved_config.opts.package_path, plugin_name)
+						-- 使用配置中的 branch 和 tag，如果配置中没有则使用 yaml 中的
+						local actual_branch = plugin_config.branch or yaml_branch
+						local actual_tag = plugin_config.tag or yaml_tag
+						
+						-- 更新 yaml 记录（这会同步 depend 字段）
+						yaml_state.update_main_plugin(
+							saved_config.opts.package_path,
+							plugin_name,
+							plugin_config,
+							actual_branch,
+							actual_tag,
+							true
+						)
+					end
+				end
+			end
+
 			if #errors > 0 then
 				-- Show failed plugins and allow retry
 				ui.show_report(errors, removed_count, total, {
-					ui = config.opts.ui,
+					ui = saved_config.opts.ui,
 					failed_plugins = failed_list,
 					on_retry = function()
 						-- Retry failed plugins

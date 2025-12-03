@@ -244,6 +244,52 @@ function M.is_dependency_referenced(dep_name, package_path, exclude_plugin)
   return false
 end
 
+--- Add a dependency to a main plugin's depend field in synapse.yaml
+--- Only updates if the main plugin already exists in yaml
+--- @param package_path string
+--- @param main_plugin_name string
+--- @param dep_repo string
+function M.add_dependency_to_main_plugin(package_path, main_plugin_name, dep_repo)
+  local yaml_path = yaml_utils.get_yaml_path(package_path)
+  local data, _ = yaml_utils.read(yaml_path)
+  if not data or not data.plugins then
+    -- Main plugin not in yaml yet, will be updated when main plugin is installed
+    return
+  end
+
+  -- Find the main plugin in yaml
+  local found_index = nil
+  for i, plugin in ipairs(data.plugins) do
+    if plugin.name == main_plugin_name then
+      found_index = i
+      break
+    end
+  end
+
+  if found_index then
+    -- Plugin exists, update its depend field
+    if not data.plugins[found_index].depend then
+      data.plugins[found_index].depend = {}
+    end
+    
+    -- Check if dependency already exists
+    local dep_exists = false
+    for _, existing_dep in ipairs(data.plugins[found_index].depend) do
+      if existing_dep == dep_repo then
+        dep_exists = true
+        break
+      end
+    end
+    
+    -- Add dependency if it doesn't exist
+    if not dep_exists then
+      table.insert(data.plugins[found_index].depend, dep_repo)
+      yaml_utils.write(yaml_path, data)
+    end
+  end
+  -- If main plugin not found in yaml, it will be created when main plugin is installed
+end
+
 return M
 
 

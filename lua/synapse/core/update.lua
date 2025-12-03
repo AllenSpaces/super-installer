@@ -461,7 +461,7 @@ function M.update_plugin(plugin, package_path, plugin_config, is_main_plugin, co
 	local function reinstall(reason)
 		local install_module = require("synapse.core.install")
 		local git_method = (config and config.method) or "https"
-		install_module.install_plugin(plugin_config, git_method, package_path, is_main_plugin, function(ok, err)
+		install_module.install_plugin(plugin_config, git_method, package_path, is_main_plugin, nil, function(ok, err)
 			if not ok then
 				return callback(false, (reason or "Reinstall failed") .. ": " .. (err or "Unknown error"))
 			end
