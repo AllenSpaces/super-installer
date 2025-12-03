@@ -244,8 +244,9 @@ local function execute_config(module)
 		return
 	end
 
-	-- Support config as table: directly call plugin.setup(config)
-	if mod.config and type(mod.config) == "table" then
+	-- Support opts as table: directly call plugin.setup(opts)
+	-- opts must be a table, not a function
+	if mod.opts and type(mod.opts) == "table" then
 		local plugin_name = extract_plugin_name(mod, module.name, module.file_path)
 		if not plugin_name then
 			vim.notify(
@@ -296,7 +297,7 @@ local function execute_config(module)
 				end
 
 				if plugin.setup then
-					local setup_ok, setup_err = pcall(plugin.setup, mod.config)
+					local setup_ok, setup_err = pcall(plugin.setup, mod.opts)
 					if setup_ok then
 						setup_success = true
 						break
@@ -329,7 +330,7 @@ local function execute_config(module)
 		return
 	end
 
-	-- Support config as function (original behavior)
+	-- Support config as function
 	if mod.config and type(mod.config) == "function" then
 		-- Call initialization function if it exists, before config
 		if mod.initialization and type(mod.initialization) == "function" then

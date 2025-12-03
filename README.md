@@ -113,10 +113,11 @@ require("synapse").setup({
 **Example**: Create `~/.config/nvim/lua/plugins/example.config.lua`:
 
 ```lua
--- Method 1: config as table (automatically calls plugin.setup(config))
+-- Method 1: opts as table (automatically calls plugin.setup(opts))
+-- opts must be a table type
 return {
     repo = "username/plugin-name",
-    config = {
+    opts = {
         -- Configuration options will be passed to plugin.setup()
         option1 = "value1",
         option2 = "value2",
@@ -124,6 +125,7 @@ return {
 }
     
 -- Method 2: config as function (manual setup)
+-- config must be a function type
 return {
     repo = "username/plugin-name",
     config = function()
@@ -139,10 +141,12 @@ return {
 }
 ```
 
-**Note**: When `config` is a table, Synapse will automatically:
-1. Extract the plugin name from the `repo` field (or use `primary` if specified)
-2. Try to `require` the plugin
-3. Call `plugin.setup(config_table)` if the plugin has a `setup` function
+**Note**: 
+- `opts` must be a **table** type - Synapse will automatically:
+  1. Extract the plugin name from the `repo` field (or use `primary` if specified)
+  2. Try to `require` the plugin
+  3. Call `plugin.setup(opts_table)` if the plugin has a `setup` function
+- `config` must be a **function** type - You have full control over plugin setup
 
 #### Additional Configuration Options
 
@@ -152,7 +156,7 @@ return {
 return {
     repo = "username/plugin-name",
     primary = "custom-plugin-name",  -- Use this as require name
-    config = {
+    opts = {
         option1 = "value1",
     },
 }
@@ -169,7 +173,7 @@ return {
         -- Or using method calls: package.submodule()
         -- This runs before plugin.setup() is called
     end,
-    config = {
+    opts = {
         option1 = "value1",
     },
 }
@@ -232,13 +236,15 @@ return {
     primary = "custom-plugin-name",
     
     -- Plugin configuration (optional)
-    -- Method 1: config as table (automatically calls plugin.setup(config))
-    config = {
+    -- Method 1: opts as table (automatically calls plugin.setup(opts))
+    -- opts must be a table type
+    opts = {
         option1 = "value1",
         option2 = "value2",
     },
     
     -- Method 2: config as function (manual setup)
+    -- config must be a function type
     -- config = function()
     --     require("plugin-name").setup({})
     -- end,
@@ -270,10 +276,10 @@ return {
 ```
 
 ```lua
--- config_path/lualine.lua (using table config)
+-- config_path/lualine.lua (using table opts)
 return {
     repo = "nvim-lualine/lualine.nvim",
-    config = {
+    opts = {
         options = {
             theme = "auto",
             icons_enabled = true,
@@ -306,7 +312,7 @@ return {
 return {
     repo = "username/plugin-name",
     primary = "custom-plugin-name",  -- Use this as require name
-    config = {
+    opts = {
         option1 = "value1",
     },
 }
@@ -321,7 +327,7 @@ return {
         local install = package({ "install" })
         -- Or: local install = package.install()
     end,
-    config = {
+    opts = {
         option1 = "value1",
     },
 }
