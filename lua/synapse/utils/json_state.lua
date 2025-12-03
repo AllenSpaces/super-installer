@@ -8,19 +8,29 @@ local M = {}
 --- @param data table
 local function update_metadata(data)
   -- Calculate total (number of main plugins + unique dependencies)
+  -- Exclude synapse plugin from count
   local main_plugin_count = 0
   local unique_deps = {}
   
   if data.plugins and type(data.plugins) == "table" then
-    main_plugin_count = #data.plugins
+    -- Count plugins excluding synapse
+    for _, plugin in ipairs(data.plugins) do
+      if plugin.name ~= "synapse" and plugin.name ~= "synapse.nvim" then
+        main_plugin_count = main_plugin_count + 1
+      end
+    end
     
-    -- Collect all unique dependencies
+    -- Collect all unique dependencies (excluding synapse)
     for _, plugin in ipairs(data.plugins) do
       if plugin.depend and type(plugin.depend) == "table" then
         for _, dep_item in ipairs(plugin.depend) do
           local dep_repo = config_utils.parse_dependency(dep_item)
           if dep_repo then
-            unique_deps[dep_repo] = true
+            local dep_name = string_utils.get_plugin_name(dep_repo)
+            -- Exclude synapse from dependencies
+            if dep_name ~= "synapse" and dep_name ~= "synapse.nvim" then
+              unique_deps[dep_repo] = true
+            end
           end
         end
       end
@@ -147,10 +157,25 @@ function M.update_main_plugin(package_path, plugin_name, plugin_config, actual_b
     return
   end
 
+  -- Don't write synapse plugin itself to json
+  if plugin_name == "synapse" or plugin_name == "synapse.nvim" then
+    return
+  end
+
   local json_path = json_utils.get_json_path(package_path)
   local data, _ = json_utils.read(json_path)
   if not data then
     data = { plugins = {} }
+  end
+  
+  -- Remove synapse plugin if it exists in the data
+  if data.plugins then
+    for i = #data.plugins, 1, -1 do
+      local plugin = data.plugins[i]
+      if plugin.name == "synapse" or plugin.name == "synapse.nvim" then
+        table.remove(data.plugins, i)
+      end
+    end
   end
   
   -- Normalize all existing plugins' depend fields
@@ -158,13 +183,17 @@ function M.update_main_plugin(package_path, plugin_name, plugin_config, actual_b
     normalize_depend_field(plugin)
   end
 
-  -- Collect depend repos from current plugin_config
+  -- Collect depend repos from current plugin_config (excluding synapse)
   local depend_repos = {}
   if plugin_config.depend and type(plugin_config.depend) == "table" then
     for _, dep_item in ipairs(plugin_config.depend) do
       local dep_repo = config_utils.parse_dependency(dep_item)
       if dep_repo then
-        table.insert(depend_repos, dep_repo)
+        local dep_name = string_utils.get_plugin_name(dep_repo)
+        -- Exclude synapse from dependencies
+        if dep_name ~= "synapse" and dep_name ~= "synapse.nvim" then
+          table.insert(depend_repos, dep_repo)
+        end
       end
     end
   end
@@ -257,6 +286,11 @@ end
 --- @param package_path string
 --- @param plugin_name string
 function M.remove_plugin_entry(package_path, plugin_name)
+  -- Don't remove synapse plugin from json (it shouldn't be there anyway)
+  if plugin_name == "synapse" or plugin_name == "synapse.nvim" then
+    return
+  end
+
   local json_path = json_utils.get_json_path(package_path)
   local data, _ = json_utils.read(json_path)
 
@@ -332,6 +366,11 @@ end
 --- @param main_plugin_name string
 --- @param dep_repo string
 function M.add_dependency_to_main_plugin(package_path, main_plugin_name, dep_repo)
+  -- Don't add synapse as a dependency
+  if main_plugin_name == "synapse" or main_plugin_name == "synapse.nvim" then
+    return
+  end
+
   local json_path = json_utils.get_json_path(package_path)
   local data, _ = json_utils.read(json_path)
   if not data or not data.plugins then

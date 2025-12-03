@@ -53,45 +53,17 @@ function M.start(config)
 
 	local removal_candidates = {}
 	for _, path in ipairs(installed_plugins) do
-		local name = vim.fn.fnamemodify(path, ":t")
-		if not required_plugins[name] and name ~= "synapse" and name ~= "synapse.nvim" then
-			table.insert(removal_candidates, name)
-		end
-	end
-
-	-- 即使没有需要删除的插件，也要更新 json 中的 depend 字段
-	local function update_all_main_plugins_json()
-		for _, plugin_config in ipairs(configs) do
-			if plugin_config.repo then
-				local plugin_name = plugin_config.repo:match("([^/]+)$")
-				plugin_name = plugin_name:gsub("%.git$", "")
-				local install_dir = git_utils.get_install_dir(plugin_name, "start", config.opts.package_path)
-				
-				-- 只更新已安装的主插件
-				if vim.fn.isdirectory(install_dir) == 1 then
-					-- 从 json 获取当前的 branch 和 tag（如果存在）
-					local json_branch, json_tag = json_state.get_branch_tag(config.opts.package_path, plugin_name)
-					-- 使用配置中的 branch 和 tag，如果配置中没有则使用 json 中的
-					local actual_branch = plugin_config.branch or json_branch
-					local actual_tag = plugin_config.tag or json_tag
-					
-					-- 更新 json 记录（这会同步 depend 字段）
-					json_state.update_main_plugin(
-						config.opts.package_path,
-						plugin_name,
-						plugin_config,
-						actual_branch,
-						actual_tag,
-						true
-					)
-				end
+		-- Only process directories (plugins are directories, not files)
+		if vim.fn.isdirectory(path) == 1 then
+			local name = vim.fn.fnamemodify(path, ":t")
+			if not required_plugins[name] and name ~= "synapse" and name ~= "synapse.nvim" then
+				table.insert(removal_candidates, name)
 			end
 		end
 	end
 
 	if #removal_candidates == 0 then
-		-- 即使没有需要删除的插件，也更新 json
-		update_all_main_plugins_json()
+		-- 没有需要卸载的插件，直接返回，不更新 json
 		ui.log_message("No unused plugins found.")
 		return
 	end
@@ -146,30 +118,32 @@ function M.start(config)
 				return
 			end
 
-			-- 在卸载完成后，更新所有主插件的 json 记录（同步 depend 字段）
-			for _, plugin_config in ipairs(saved_configs) do
-				if plugin_config.repo then
-					local plugin_name = plugin_config.repo:match("([^/]+)$")
-					plugin_name = plugin_name:gsub("%.git$", "")
-					local install_dir = git_utils.get_install_dir(plugin_name, "start", saved_config.opts.package_path)
-					
-					-- 只更新已安装的主插件
-					if vim.fn.isdirectory(install_dir) == 1 then
-						-- 从 json 获取当前的 branch 和 tag（如果存在）
-						local json_branch, json_tag = json_state.get_branch_tag(saved_config.opts.package_path, plugin_name)
-						-- 使用配置中的 branch 和 tag，如果配置中没有则使用 json 中的
-						local actual_branch = plugin_config.branch or json_branch
-						local actual_tag = plugin_config.tag or json_tag
+			-- 只有在实际卸载了插件后才更新 json（同步 depend 字段）
+			if removed_count > 0 then
+				for _, plugin_config in ipairs(saved_configs) do
+					if plugin_config.repo then
+						local plugin_name = plugin_config.repo:match("([^/]+)$")
+						plugin_name = plugin_name:gsub("%.git$", "")
+						local install_dir = git_utils.get_install_dir(plugin_name, "start", saved_config.opts.package_path)
 						
-						-- 更新 json 记录（这会同步 depend 字段）
-						json_state.update_main_plugin(
-							saved_config.opts.package_path,
-							plugin_name,
-							plugin_config,
-							actual_branch,
-							actual_tag,
-							true
-						)
+						-- 只更新已安装的主插件
+						if vim.fn.isdirectory(install_dir) == 1 then
+							-- 从 json 获取当前的 branch 和 tag（如果存在）
+							local json_branch, json_tag = json_state.get_branch_tag(saved_config.opts.package_path, plugin_name)
+							-- 使用配置中的 branch 和 tag，如果配置中没有则使用 json 中的
+							local actual_branch = plugin_config.branch or json_branch
+							local actual_tag = plugin_config.tag or json_tag
+							
+							-- 更新 json 记录（这会同步 depend 字段）
+							json_state.update_main_plugin(
+								saved_config.opts.package_path,
+								plugin_name,
+								plugin_config,
+								actual_branch,
+								actual_tag,
+								true
+							)
+						end
 					end
 				end
 			end
