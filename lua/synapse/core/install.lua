@@ -3,7 +3,7 @@ local error_ui = require("synapse.ui.error")
 local git_utils = require("synapse.utils.git")
 local config_utils = require("synapse.utils.config")
 local string_utils = require("synapse.utils.string")
-local yaml_state = require("synapse.utils.yaml_state")
+local json_state = require("synapse.utils.json_state")
 
 local M = {}
 
@@ -46,10 +46,10 @@ local function execute_commands(commands, plugin_dir, callback)
 	return job_ids[1] -- Return first job_id for tracking
 end
 
---- Ensure synapse.yaml exists, create empty file if it doesn't
+--- Ensure synapse.json exists, create empty file if it doesn't
 --- @param config table
-local function ensure_yaml_exists(config)
-	yaml_state.ensure_yaml_exists(config.opts.package_path)
+local function ensure_json_exists(config)
+	json_state.ensure_json_exists(config.opts.package_path)
 end
 
 function M.start(config)
@@ -58,8 +58,8 @@ function M.start(config)
 	-- Clear error cache at start
 	error_ui.clear_cache()
 
-	-- Check and create synapse.yaml if it doesn't exist
-	ensure_yaml_exists(config)
+	-- Check and create synapse.json if it doesn't exist
+	ensure_json_exists(config)
 
 	-- 从 config_path 读取配置文件
 	local configs = config_utils.load_config_files(config.opts.config_path)
@@ -151,7 +151,7 @@ function M.start(config)
 		end
 	end
 	
-	-- 建立依赖项到主插件的映射（用于安装依赖项时更新主插件的 yaml）
+			-- 建立依赖项到主插件的映射（用于安装依赖项时更新主插件的 json）
 	local dep_to_main_plugins = {} -- dep_repo -> {main_plugin_repo1, main_plugin_repo2, ...}
 	for _, plugin_config in ipairs(configs) do
 		if plugin_config.repo and plugin_config.depend and type(plugin_config.depend) == "table" then
@@ -362,7 +362,7 @@ function M.start(config)
 	run_install_queue(pending_install)
 end
 
--- YAML metadata helpers are centralized in synapse.utils.yaml_state
+-- JSON metadata helpers are centralized in synapse.utils.json_state
 
 function M.install_plugin(plugin_config, git_config, package_path, is_main_plugin, parent_main_plugins, callback)
 	if not installation_active then
@@ -373,20 +373,20 @@ function M.install_plugin(plugin_config, git_config, package_path, is_main_plugi
 	local plugin_name = string_utils.get_plugin_name(repo)
 	local target_dir = git_utils.get_install_dir(plugin_name, "start", package_path)
 	
-	-- Determine branch and tag: if plugin already exists, try to get from synapse.yaml first
+	-- Determine branch and tag: if plugin already exists, try to get from synapse.json first
 	-- But prioritize config tag if it exists
 	local branch = plugin_config.branch  -- Don't default to "main", use nil if not specified
 	local tag = plugin_config.tag  -- Always prioritize config tag
 	if vim.fn.isdirectory(target_dir) == 1 then
-		-- Plugin already exists, try to get branch and tag from synapse.yaml
-		local yaml_branch, yaml_tag = yaml_state.get_branch_tag(package_path, plugin_name)
-		-- Only use yaml_branch if it's not "main" or "master" (these shouldn't be used)
-		if not branch and yaml_branch and yaml_branch ~= "main" and yaml_branch ~= "master" then
-			branch = yaml_branch
+		-- Plugin already exists, try to get branch and tag from synapse.json
+		local json_branch, json_tag = json_state.get_branch_tag(package_path, plugin_name)
+		-- Only use json_branch if it's not "main" or "master" (these shouldn't be used)
+		if not branch and json_branch and json_branch ~= "main" and json_branch ~= "master" then
+			branch = json_branch
 		end
-		-- Only use YAML tag if config doesn't have one
-		if not tag and yaml_tag then
-			tag = yaml_tag
+		-- Only use JSON tag if config doesn't have one
+		if not tag and json_tag then
+			tag = json_tag
 		end
 	else
 		-- New plugin, use branch and tag from config (don't default to "main")
@@ -439,31 +439,31 @@ function M.install_plugin(plugin_config, git_config, package_path, is_main_plugi
 					return callback(false, exec_err)
 				end
 
-				-- Update synapse.yaml on successful installation
+				-- Update synapse.json on successful installation
 				if is_main_plugin then
 					-- 主插件：直接更新
-					yaml_state.update_main_plugin(package_path, plugin_name, plugin_config, branch, tag, true)
+					json_state.update_main_plugin(package_path, plugin_name, plugin_config, branch, tag, true)
 				elseif parent_main_plugins and #parent_main_plugins > 0 then
 					-- 依赖项：更新所有包含它的主插件的 depend 字段
 					for _, main_repo in ipairs(parent_main_plugins) do
 						local main_plugin_name = main_repo:match("([^/]+)$")
 						main_plugin_name = main_plugin_name:gsub("%.git$", "")
-						yaml_state.add_dependency_to_main_plugin(package_path, main_plugin_name, plugin_config.repo)
+						json_state.add_dependency_to_main_plugin(package_path, main_plugin_name, plugin_config.repo)
 					end
 				end
 				callback(true, nil)
 			end)
 		else
-			-- Update synapse.yaml on successful installation
+			-- Update synapse.json on successful installation
 			if is_main_plugin then
 				-- 主插件：直接更新
-				yaml_state.update_main_plugin(package_path, plugin_name, plugin_config, branch, tag, true)
+				json_state.update_main_plugin(package_path, plugin_name, plugin_config, branch, tag, true)
 			elseif parent_main_plugins and #parent_main_plugins > 0 then
 				-- 依赖项：更新所有包含它的主插件的 depend 字段
 				for _, main_repo in ipairs(parent_main_plugins) do
 					local main_plugin_name = main_repo:match("([^/]+)$")
 					main_plugin_name = main_plugin_name:gsub("%.git$", "")
-					yaml_state.add_dependency_to_main_plugin(package_path, main_plugin_name, plugin_config.repo)
+					json_state.add_dependency_to_main_plugin(package_path, main_plugin_name, plugin_config.repo)
 				end
 			end
 			callback(true, nil)

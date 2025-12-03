@@ -1,30 +1,75 @@
-local yaml_utils = require("synapse.utils.yaml")
+local json_utils = require("synapse.utils.json")
 local config_utils = require("synapse.utils.config")
 local string_utils = require("synapse.utils.string")
 
 local M = {}
 
---- Ensure synapse.yaml exists, create empty file if it doesn't
---- @param package_path string
-function M.ensure_yaml_exists(package_path)
-  local yaml_path = yaml_utils.get_yaml_path(package_path)
+--- Update metadata fields (total, update_time, hash) in data
+--- @param data table
+local function update_metadata(data)
+  -- Calculate total (number of main plugins + unique dependencies)
+  local main_plugin_count = 0
+  local unique_deps = {}
+  
+  if data.plugins and type(data.plugins) == "table" then
+    main_plugin_count = #data.plugins
+    
+    -- Collect all unique dependencies
+    for _, plugin in ipairs(data.plugins) do
+      if plugin.depend and type(plugin.depend) == "table" then
+        for _, dep_item in ipairs(plugin.depend) do
+          local dep_repo = config_utils.parse_dependency(dep_item)
+          if dep_repo then
+            unique_deps[dep_repo] = true
+          end
+        end
+      end
+    end
+  end
+  
+  -- Count unique dependencies
+  local dep_count = 0
+  for _ in pairs(unique_deps) do
+    dep_count = dep_count + 1
+  end
+  
+  -- Total = main plugins + unique dependencies
+  local total = main_plugin_count + dep_count
+  
+  -- Get current timestamp
+  local update_time = os.time()
+  
+  -- Convert timestamp to hexadecimal
+  local hash = string.format("%x", update_time)
+  
+  -- Update metadata fields
+  data.total = total
+  data.update_time = update_time
+  data.hash = hash
+end
 
-  if vim.fn.filereadable(yaml_path) == 1 then
+--- Ensure synapse.json exists, create empty file if it doesn't
+--- @param package_path string
+function M.ensure_json_exists(package_path)
+  local json_path = json_utils.get_json_path(package_path)
+
+  if vim.fn.filereadable(json_path) == 1 then
     return
   end
 
-  local yaml_data = { plugins = {} }
-  yaml_utils.write(yaml_path, yaml_data)
+  local json_data = { plugins = {} }
+  update_metadata(json_data)
+  json_utils.write(json_path, json_data)
 end
 
---- Get plugin branch and tag from synapse.yaml
+--- Get plugin branch and tag from synapse.json
 --- @param package_path string
 --- @param plugin_name string
 --- @return string|nil branch
 --- @return string|nil tag
 function M.get_branch_tag(package_path, plugin_name)
-  local yaml_path = yaml_utils.get_yaml_path(package_path)
-  local data, _ = yaml_utils.read(yaml_path)
+  local json_path = json_utils.get_json_path(package_path)
+  local data, _ = json_utils.read(json_path)
 
   if data and data.plugins then
     for _, plugin in ipairs(data.plugins) do
@@ -37,7 +82,7 @@ function M.get_branch_tag(package_path, plugin_name)
   return nil, nil
 end
 
---- Internal helper: collect all dependency repos from a YAML data table
+--- Internal helper: collect all dependency repos from a JSON data table
 --- @param data table
 --- @return table<string, boolean>
 local function collect_all_depend_repos(data)
@@ -60,7 +105,36 @@ local function collect_all_depend_repos(data)
   return all_depend_repos
 end
 
---- Update synapse.yaml with plugin information (only for main plugins)
+--- Normalize depend field to ensure it's always an array
+--- @param plugin table
+local function normalize_depend_field(plugin)
+  if plugin.depend then
+    -- If depend is not an array, convert it
+    if type(plugin.depend) ~= "table" then
+      plugin.depend = {}
+    else
+      -- Check if it's an array (has only numeric keys)
+      local is_array = true
+      local has_numeric_keys = false
+      for k, _ in pairs(plugin.depend) do
+        if type(k) == "number" then
+          has_numeric_keys = true
+        else
+          is_array = false
+          break
+        end
+      end
+      -- If it's not an array, convert to array
+      if not is_array or not has_numeric_keys then
+        plugin.depend = {}
+      end
+    end
+  else
+    plugin.depend = {}
+  end
+end
+
+--- Update synapse.json with plugin information (only for main plugins)
 --- This keeps dependency repos as full repo strings
 --- @param package_path string
 --- @param plugin_name string
@@ -73,10 +147,15 @@ function M.update_main_plugin(package_path, plugin_name, plugin_config, actual_b
     return
   end
 
-  local yaml_path = yaml_utils.get_yaml_path(package_path)
-  local data, _ = yaml_utils.read(yaml_path)
+  local json_path = json_utils.get_json_path(package_path)
+  local data, _ = json_utils.read(json_path)
   if not data then
     data = { plugins = {} }
+  end
+  
+  -- Normalize all existing plugins' depend fields
+  for _, plugin in ipairs(data.plugins) do
+    normalize_depend_field(plugin)
   end
 
   -- Collect depend repos from current plugin_config
@@ -150,7 +229,8 @@ function M.update_main_plugin(package_path, plugin_name, plugin_config, actual_b
 
     if is_in_other_depend then
       table.remove(data.plugins, found_index)
-      yaml_utils.write(yaml_path, data)
+      update_metadata(data)
+      json_utils.write(json_path, data)
       return
     end
 
@@ -169,15 +249,16 @@ function M.update_main_plugin(package_path, plugin_name, plugin_config, actual_b
     table.insert(data.plugins, entry)
   end
 
-  yaml_utils.write(yaml_path, data)
+  update_metadata(data)
+  json_utils.write(json_path, data)
 end
 
---- Remove plugin record from synapse.yaml
+--- Remove plugin record from synapse.json
 --- @param package_path string
 --- @param plugin_name string
 function M.remove_plugin_entry(package_path, plugin_name)
-  local yaml_path = yaml_utils.get_yaml_path(package_path)
-  local data, _ = yaml_utils.read(yaml_path)
+  local json_path = json_utils.get_json_path(package_path)
+  local data, _ = json_utils.read(json_path)
 
   if not data or not data.plugins then
     return
@@ -190,16 +271,17 @@ function M.remove_plugin_entry(package_path, plugin_name)
     end
   end
 
-  yaml_utils.write(yaml_path, data)
+  update_metadata(data)
+  json_utils.write(json_path, data)
 end
 
---- Get dependencies of a plugin from synapse.yaml
+--- Get dependencies of a plugin from synapse.json
 --- @param package_path string
 --- @param plugin_name string
 --- @return table|nil
 function M.get_plugin_dependencies(package_path, plugin_name)
-  local yaml_path = yaml_utils.get_yaml_path(package_path)
-  local data, _ = yaml_utils.read(yaml_path)
+  local json_path = json_utils.get_json_path(package_path)
+  local data, _ = json_utils.read(json_path)
 
   if not data or not data.plugins then
     return nil
@@ -220,8 +302,8 @@ end
 --- @param exclude_plugin string|nil
 --- @return boolean
 function M.is_dependency_referenced(dep_name, package_path, exclude_plugin)
-  local yaml_path = yaml_utils.get_yaml_path(package_path)
-  local data, _ = yaml_utils.read(yaml_path)
+  local json_path = json_utils.get_json_path(package_path)
+  local data, _ = json_utils.read(json_path)
 
   if not data or not data.plugins then
     return false
@@ -244,20 +326,25 @@ function M.is_dependency_referenced(dep_name, package_path, exclude_plugin)
   return false
 end
 
---- Add a dependency to a main plugin's depend field in synapse.yaml
---- Only updates if the main plugin already exists in yaml
+--- Add a dependency to a main plugin's depend field in synapse.json
+--- Only updates if the main plugin already exists in json
 --- @param package_path string
 --- @param main_plugin_name string
 --- @param dep_repo string
 function M.add_dependency_to_main_plugin(package_path, main_plugin_name, dep_repo)
-  local yaml_path = yaml_utils.get_yaml_path(package_path)
-  local data, _ = yaml_utils.read(yaml_path)
+  local json_path = json_utils.get_json_path(package_path)
+  local data, _ = json_utils.read(json_path)
   if not data or not data.plugins then
-    -- Main plugin not in yaml yet, will be updated when main plugin is installed
+    -- Main plugin not in json yet, will be updated when main plugin is installed
     return
   end
 
-  -- Find the main plugin in yaml
+  -- Normalize all existing plugins' depend fields
+  for _, plugin in ipairs(data.plugins) do
+    normalize_depend_field(plugin)
+  end
+  
+  -- Find the main plugin in json
   local found_index = nil
   for i, plugin in ipairs(data.plugins) do
     if plugin.name == main_plugin_name then
@@ -267,10 +354,8 @@ function M.add_dependency_to_main_plugin(package_path, main_plugin_name, dep_rep
   end
 
   if found_index then
-    -- Plugin exists, update its depend field
-    if not data.plugins[found_index].depend then
-      data.plugins[found_index].depend = {}
-    end
+    -- Plugin exists, ensure depend is an array
+    normalize_depend_field(data.plugins[found_index])
     
     -- Check if dependency already exists
     local dep_exists = false
@@ -284,12 +369,12 @@ function M.add_dependency_to_main_plugin(package_path, main_plugin_name, dep_rep
     -- Add dependency if it doesn't exist
     if not dep_exists then
       table.insert(data.plugins[found_index].depend, dep_repo)
-      yaml_utils.write(yaml_path, data)
+      update_metadata(data)
+      json_utils.write(json_path, data)
     end
   end
-  -- If main plugin not found in yaml, it will be created when main plugin is installed
+  -- If main plugin not found in json, it will be created when main plugin is installed
 end
 
 return M
-
 

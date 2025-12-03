@@ -3,7 +3,7 @@ local error_ui = require("synapse.ui.error")
 local git_utils = require("synapse.utils.git")
 local config_utils = require("synapse.utils.config")
 local string_utils = require("synapse.utils.string")
-local yaml_state = require("synapse.utils.yaml_state")
+local json_state = require("synapse.utils.json_state")
 
 local M = {}
 
@@ -389,19 +389,19 @@ function M.check_plugin(plugin, package_path, plugin_config, callback)
 		return callback(false, "Directory is not found")
 	end
 
-	-- 从 YAML 获取当前记录的 branch / tag
-	local yaml_branch, yaml_tag = yaml_state.get_branch_tag(package_path, plugin_name)
+	-- 从 JSON 获取当前记录的 branch / tag
+	local json_branch, json_tag = json_state.get_branch_tag(package_path, plugin_name)
 	-- 配置中的 tag / branch
 	local config_tag = plugin_config and plugin_config.tag or nil
 	local config_branch = plugin_config and plugin_config.branch or nil
 	
-	-- 1. 如果配置中的 tag 与 YAML 中的不同，需要更新
-	if config_tag ~= yaml_tag then
+	-- 1. 如果配置中的 tag 与 JSON 中的不同，需要更新
+	if config_tag ~= json_tag then
 		return callback(true, "need_update")
 	end
 
 	-- 2. tag 一致且存在 tag：认为已经是对应 tag，不再检查分支
-	if yaml_tag or config_tag then
+	if json_tag or config_tag then
 		return callback(true, "already_updated")
 	end
 
@@ -414,9 +414,9 @@ function M.check_plugin(plugin, package_path, plugin_config, callback)
 	end
 
 	local norm_cfg_branch = normalize_branch(config_branch)
-	local norm_yaml_branch = normalize_branch(yaml_branch)
+	local norm_json_branch = normalize_branch(json_branch)
 
-	if norm_cfg_branch ~= norm_yaml_branch then
+	if norm_cfg_branch ~= norm_json_branch then
 		-- 仅分支不同也需要执行更新流程（触发 update_plugin）
 		return callback(true, "need_update")
 	end
@@ -454,8 +454,8 @@ function M.update_plugin(plugin, package_path, plugin_config, is_main_plugin, co
 	local config_tag = plugin_config and plugin_config.tag or nil
 	local config_branch = plugin_config and plugin_config.branch or nil
 
-	-- 获取 YAML 中记录的 tag 和 branch
-	local yaml_branch, yaml_tag = yaml_state.get_branch_tag(package_path, plugin_name)
+	-- 获取 JSON 中记录的 tag 和 branch
+	local json_branch, json_tag = json_state.get_branch_tag(package_path, plugin_name)
 
 	-- 如果目录不存在，直接按当前配置重新安装
 	local function reinstall(reason)
@@ -479,7 +479,7 @@ function M.update_plugin(plugin, package_path, plugin_config, is_main_plugin, co
 	--    - tag 改成新的值：在当前仓库上 fetch tags + checkout 新 tag
 	--    - tag 从有到无：删除仓库，重新 clone（不带 tag 参数）
 	---------------------------------------------------------------------------
-	if config_tag ~= yaml_tag then
+	if config_tag ~= json_tag then
 		if config_tag then
 			local cmd = string.format(
 				"cd %s && git fetch origin --tags && git checkout %s && git submodule update --init --recursive",
@@ -493,7 +493,7 @@ function M.update_plugin(plugin, package_path, plugin_config, is_main_plugin, co
 
 				if is_main_plugin then
 					-- 记录新的 tag，branch 在 tag 模式下一般可以忽略
-					yaml_state.update_main_plugin(package_path, plugin_name, plugin_config, nil, config_tag, true)
+					json_state.update_main_plugin(package_path, plugin_name, plugin_config, nil, config_tag, true)
 				end
 
 				callback(true, "Switched tag and updated")
@@ -526,9 +526,9 @@ function M.update_plugin(plugin, package_path, plugin_config, is_main_plugin, co
 	end
 
 	local norm_cfg_branch = normalize_branch(config_branch)
-	local norm_yaml_branch = normalize_branch(yaml_branch)
+	local norm_json_branch = normalize_branch(json_branch)
 
-	if norm_cfg_branch ~= norm_yaml_branch then
+	if norm_cfg_branch ~= norm_json_branch then
 		if norm_cfg_branch then
 			-- 从 A -> B：使用 git checkout -B 创建/重置本地分支，再拉最新代码
 			-- 注意这里不再强依赖 origin/<branch> 已存在，避免类似
@@ -545,7 +545,7 @@ function M.update_plugin(plugin, package_path, plugin_config, is_main_plugin, co
 				end
 
 				if is_main_plugin then
-					yaml_state.update_main_plugin(package_path, plugin_name, plugin_config, norm_cfg_branch, nil, true)
+					json_state.update_main_plugin(package_path, plugin_name, plugin_config, norm_cfg_branch, nil, true)
 				end
 
 				callback(true, "Switched branch and updated")
@@ -576,7 +576,7 @@ function M.update_plugin(plugin, package_path, plugin_config, is_main_plugin, co
 			config_tag
 		)
 	else
-		local branch = norm_cfg_branch or norm_yaml_branch
+		local branch = norm_cfg_branch or norm_json_branch
 		if branch then
 			cmd = string.format(
 				"cd %s && git fetch origin && git checkout -B %s && git pull origin %s && git submodule update --init --recursive",
@@ -600,9 +600,9 @@ function M.update_plugin(plugin, package_path, plugin_config, is_main_plugin, co
 		local execute_cmds = plugin_config and plugin_config.execute or nil
 		local function finalize_ok()
 			if plugin_config and is_main_plugin then
-				local actual_branch = norm_cfg_branch or norm_yaml_branch
-				local actual_tag = config_tag or yaml_tag
-				yaml_state.update_main_plugin(package_path, plugin_name, plugin_config, actual_branch, actual_tag, true)
+				local actual_branch = norm_cfg_branch or norm_json_branch
+				local actual_tag = config_tag or json_tag
+				json_state.update_main_plugin(package_path, plugin_name, plugin_config, actual_branch, actual_tag, true)
 			end
 			callback(true, "Success")
 		end

@@ -2,7 +2,7 @@ local ui = require("synapse.ui")
 local error_ui = require("synapse.ui.error")
 local git_utils = require("synapse.utils.git")
 local config_utils = require("synapse.utils.config")
-local yaml_state = require("synapse.utils.yaml_state")
+local json_state = require("synapse.utils.json_state")
 local string_utils = require("synapse.utils.string")
 
 local M = {}
@@ -59,8 +59,8 @@ function M.start(config)
 		end
 	end
 
-	-- 即使没有需要删除的插件，也要更新 yaml 中的 depend 字段
-	local function update_all_main_plugins_yaml()
+	-- 即使没有需要删除的插件，也要更新 json 中的 depend 字段
+	local function update_all_main_plugins_json()
 		for _, plugin_config in ipairs(configs) do
 			if plugin_config.repo then
 				local plugin_name = plugin_config.repo:match("([^/]+)$")
@@ -69,14 +69,14 @@ function M.start(config)
 				
 				-- 只更新已安装的主插件
 				if vim.fn.isdirectory(install_dir) == 1 then
-					-- 从 yaml 获取当前的 branch 和 tag（如果存在）
-					local yaml_branch, yaml_tag = yaml_state.get_branch_tag(config.opts.package_path, plugin_name)
-					-- 使用配置中的 branch 和 tag，如果配置中没有则使用 yaml 中的
-					local actual_branch = plugin_config.branch or yaml_branch
-					local actual_tag = plugin_config.tag or yaml_tag
+					-- 从 json 获取当前的 branch 和 tag（如果存在）
+					local json_branch, json_tag = json_state.get_branch_tag(config.opts.package_path, plugin_name)
+					-- 使用配置中的 branch 和 tag，如果配置中没有则使用 json 中的
+					local actual_branch = plugin_config.branch or json_branch
+					local actual_tag = plugin_config.tag or json_tag
 					
-					-- 更新 yaml 记录（这会同步 depend 字段）
-					yaml_state.update_main_plugin(
+					-- 更新 json 记录（这会同步 depend 字段）
+					json_state.update_main_plugin(
 						config.opts.package_path,
 						plugin_name,
 						plugin_config,
@@ -90,8 +90,8 @@ function M.start(config)
 	end
 
 	if #removal_candidates == 0 then
-		-- 即使没有需要删除的插件，也更新 yaml
-		update_all_main_plugins_yaml()
+		-- 即使没有需要删除的插件，也更新 json
+		update_all_main_plugins_json()
 		ui.log_message("No unused plugins found.")
 		return
 	end
@@ -146,7 +146,7 @@ function M.start(config)
 				return
 			end
 
-			-- 在卸载完成后，更新所有主插件的 yaml 记录（同步 depend 字段）
+			-- 在卸载完成后，更新所有主插件的 json 记录（同步 depend 字段）
 			for _, plugin_config in ipairs(saved_configs) do
 				if plugin_config.repo then
 					local plugin_name = plugin_config.repo:match("([^/]+)$")
@@ -155,14 +155,14 @@ function M.start(config)
 					
 					-- 只更新已安装的主插件
 					if vim.fn.isdirectory(install_dir) == 1 then
-						-- 从 yaml 获取当前的 branch 和 tag（如果存在）
-						local yaml_branch, yaml_tag = yaml_state.get_branch_tag(saved_config.opts.package_path, plugin_name)
-						-- 使用配置中的 branch 和 tag，如果配置中没有则使用 yaml 中的
-						local actual_branch = plugin_config.branch or yaml_branch
-						local actual_tag = plugin_config.tag or yaml_tag
+						-- 从 json 获取当前的 branch 和 tag（如果存在）
+						local json_branch, json_tag = json_state.get_branch_tag(saved_config.opts.package_path, plugin_name)
+						-- 使用配置中的 branch 和 tag，如果配置中没有则使用 json 中的
+						local actual_branch = plugin_config.branch or json_branch
+						local actual_tag = plugin_config.tag or json_tag
 						
-						-- 更新 yaml 记录（这会同步 depend 字段）
-						yaml_state.update_main_plugin(
+						-- 更新 json 记录（这会同步 depend 字段）
+						json_state.update_main_plugin(
 							saved_config.opts.package_path,
 							plugin_name,
 							plugin_config,
@@ -289,28 +289,28 @@ function M.remove_plugin(plugin_name, package_path, callback)
 		return
 	end
 
-	-- Get dependencies from synapse.yaml
-	local dependencies = yaml_state.get_plugin_dependencies(package_path, plugin_name)
+	-- Get dependencies from synapse.json
+	local dependencies = json_state.get_plugin_dependencies(package_path, plugin_name)
 	
 	-- Remove the plugin
 	local cmd = string.format("rm -rf %s", vim.fn.shellescape(install_path))
 	local job_id = git_utils.execute_command(cmd, function(success, err)
 		if success then
-			-- Remove from synapse.yaml
-			yaml_state.remove_plugin_entry(package_path, plugin_name)
+			-- Remove from synapse.json
+			json_state.remove_plugin_entry(package_path, plugin_name)
 			
 			-- Check and remove unreferenced dependencies
 			if dependencies and #dependencies > 0 then
 				for _, dep_repo in ipairs(dependencies) do
 					local dep_name = string_utils.get_plugin_name(dep_repo)
 					-- Check if dependency is referenced by other plugins
-					if not yaml_state.is_dependency_referenced(dep_name, package_path, plugin_name) then
+					if not json_state.is_dependency_referenced(dep_name, package_path, plugin_name) then
 						-- Remove unreferenced dependency
 						local dep_path = git_utils.get_install_dir(dep_name, "start", package_path)
 						if vim.fn.isdirectory(dep_path) == 1 then
 							local dep_cmd = string.format("rm -rf %s", vim.fn.shellescape(dep_path))
 							git_utils.execute_command(dep_cmd, function() end)
-							yaml_state.remove_plugin_entry(package_path, dep_name)
+							json_state.remove_plugin_entry(package_path, dep_name)
 						end
 					end
 				end
