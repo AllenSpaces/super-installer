@@ -6,9 +6,10 @@ M.default = {
 
 	opts = {
 		default = "OriginCoderPulse/synapse.nvim",
-		package_path = os.getenv("HOME") .. "/.synapse/package",
-		config_path = os.getenv("HOME") .. "/.config/nvim",
-		load_config = os.getenv("HOME") .. "/.config/nvim",
+		package_path = vim.fn.stdpath("data") .. "/package",
+		-- Directory to scan for .config.lua files (recursive)
+		-- These files support both installation config and auto-setup
+		config_path = vim.fn.stdpath("config"),
 
 		ui = {
 			style = "float",

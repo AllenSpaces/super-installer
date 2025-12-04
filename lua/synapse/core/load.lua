@@ -113,7 +113,7 @@ local function extract_plugin_name(mod, module_name, file_path)
 	if mod and mod.primary and type(mod.primary) == "string" and mod.primary ~= "" then
 		return mod.primary
 	end
-	
+
 	-- Second, try to extract from repo field if available
 	if mod and mod.repo and type(mod.repo) == "string" then
 		return string_utils.get_plugin_name(mod.repo)
@@ -387,9 +387,9 @@ local function execute_config(module)
 end
 
 --- Load configuration files from config_path
+--- Scans .config.lua files for both auto-setup and installation config
 --- @param config_path string|table Path to scan for .config.lua files
---- @param config_files_path string|nil Optional path to scan for plugin config files (for dependency opt loading)
-function M.load_config(config_path, config_files_path)
+function M.load_config(config_path)
 	if not config_path then
 		return
 	end
@@ -410,7 +410,7 @@ function M.load_config(config_path, config_files_path)
 	path = vim.fn.fnamemodify(path, ":p")
 	path = path:gsub("/$", "") -- Remove trailing slash
 
-	-- Step 1: Scan and load all .config.lua files first
+	-- Step 1: Scan and load all .config.lua files for auto-setup
 	-- This ensures main plugins are set up before their dependencies
 	local config_modules = scan_config_files(path)
 
@@ -419,17 +419,15 @@ function M.load_config(config_path, config_files_path)
 		execute_config(module)
 	end
 
-	-- Step 2: Load dependency opt configurations from config files
+	-- Step 2: Load dependency opt configurations from the same config_path
 	-- This happens after main plugins are set up, so dependencies can safely use them
-	if config_files_path then
-		local configs = config_utils.load_config_files(config_files_path)
-		for _, plugin_config in ipairs(configs) do
-			if plugin_config.depend and type(plugin_config.depend) == "table" then
-				for _, dep_item in ipairs(plugin_config.depend) do
-					local dep_repo, dep_primary, dep_opt = config_utils.parse_dependency(dep_item)
-					if dep_repo and dep_opt then
-						load_dependency_opt(dep_repo, dep_primary, dep_opt)
-					end
+	local configs = config_utils.load_config_files(path)
+	for _, plugin_config in ipairs(configs) do
+		if plugin_config.depend and type(plugin_config.depend) == "table" then
+			for _, dep_item in ipairs(plugin_config.depend) do
+				local dep_repo, dep_primary, dep_opt = config_utils.parse_dependency(dep_item)
+				if dep_repo and dep_opt then
+					load_dependency_opt(dep_repo, dep_primary, dep_opt)
 				end
 			end
 		end

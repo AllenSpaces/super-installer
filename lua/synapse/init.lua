@@ -9,10 +9,11 @@ function M.setup(user_config)
 	local merged_config = config.merge(user_config)
 	vim.opt.rtp:append(merged_config.opts.package_path .. "/*")
 	vim.opt.rtp:append(merged_config.opts.package_path .. "/*/after")
-	
+
 	-- Load configs (including dependency opt configurations)
-	if merged_config.opts.load_config then
-		load_config.load_config(merged_config.opts.load_config, merged_config.opts.config_path)
+	-- Only scans .config.lua files from config_path
+	if merged_config.opts.config_path then
+		load_config.load_config(merged_config.opts.config_path)
 	end
 
 	-- Setup commands and keymaps

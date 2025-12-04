@@ -2,317 +2,193 @@
 
 A modern, lightweight plugin manager for Neovim with a beautiful UI and intelligent dependency management.
 
-> 📖 **Full Documentation**: See `:help synapse` or [doc/synapse.txt](doc/synapse.txt) for complete documentation.
-
 ## Features
 
-- 📦 **Configuration-based Management**: Manage plugins through simple Lua configuration files
-- 🔗 **Automatic Dependency Resolution**: Automatically install, update, and protect plugin dependencies
-- 🌿 **Branch & Tag Support**: Clone specific branches or lock to tag versions
-- 🎨 **Beautiful UI**: Real-time progress display with customizable ASCII art headers
-- ⚡ **Smart Updates**: Check for updates before applying them
+- 🚀 **Fast Installation**: Quick plugin installation with progress tracking
+- 🎨 **Beautiful UI**: Modern floating window interface
+- 🔗 **Dependency Management**: Automatic dependency resolution
 - 🧹 **Auto Cleanup**: Remove unused plugins automatically
 - 🔧 **Post-Install Commands**: Execute build commands after installation/update
+- ⚙️ **Auto Setup**: Automatically set up plugins from `.config.lua` files
 
 ## Installation
 
-### 1. Clone to Neovim Default Plugin Directory
+### Using a Plugin Manager
 
-Clone the repository to Neovim's default plugin directory:
-
-```bash
-# Get Neovim data directory and clone
-git clone https://github.com/OriginCoderPulse/synapse.nvim \
-    "$(nvim --cmd 'echo stdpath("data")' --cmd 'qa')/site/pack/packer/start/synapse.nvim"
-```
-
-Or manually:
-
-```bash
-# Unix/Linux/macOS
-git clone https://github.com/OriginCoderPulse/synapse.nvim \
-    ~/.local/share/nvim/site/pack/packer/start/synapse.nvim
-
-# Windows
-git clone https://github.com/OriginCoderPulse/synapse.nvim \
-    %LOCALAPPDATA%\nvim-data\site\pack\packer\start\synapse.nvim
-```
-
-### 2. Configure in init.lua
-
-Add the following to your `init.lua`:
+If you're using another plugin manager to install Synapse.nvim:
 
 ```lua
--- Add synapse.nvim to runtimepath (if using custom location)
-vim.opt.runtimepath:prepend(os.getenv("HOME") .. "/.nvim-utils/package/synapse.nvim")
+-- Using lazy.nvim
+{
+    "OriginCoderPulse/synapse.nvim",
+    config = function()
+        require("synapse").setup({})
+    end,
+}
 
--- Setup synapse.nvim
-require("synapse").setup()
+-- Using packer.nvim
+use {
+    "OriginCoderPulse/synapse.nvim",
+    config = function()
+        require("synapse").setup({})
+    end,
+}
 ```
 
-**Note**: If you cloned to Neovim's default plugin directory (`~/.local/share/nvim/site/pack/packer/start/`), you don't need to set `runtimepath` manually.
+### Manual Installation
 
-### 3. Commands and Keymaps
+1. Clone the repository:
+```bash
+git clone https://github.com/OriginCoderPulse/synapse.nvim.git ~/.config/nvim/lua/synapse
+```
 
-**Commands**:
-- `:SynapseDownload` - Install missing plugins
-- `:SynapseUpgrade` - Update all plugins
-- `:SynapseRemove` - Remove unused plugins
-- `:SynapseError` - View error messages from failed operations
-
-**Default Keymaps**:
-- `<leader>si` - Install plugins (`:SynapseDownload`)
-- `<leader>sr` - Remove unused plugins (`:SynapseRemove`)
-- `<leader>su` - Update plugins (`:SynapseUpgrade`)
+2. Add to your Neovim configuration:
+```lua
+require("synapse").setup({})
+```
 
 ## Configuration
 
-### 4.1 Custom Plugin Installation Directory
-
-You can specify a custom directory for plugin installation:
+### Basic Setup
 
 ```lua
 require("synapse").setup({
     opts = {
+        -- Custom plugin installation directory (optional)
         package_path = os.getenv("HOME") .. "/.nvim-utils/package",
-        -- ... other options
-    },
-})
-```
-
-**Important**: If using a custom `package_path`, you must also add it to `runtimepath`:
-
-```lua
--- Add custom package directory to runtimepath
-vim.opt.runtimepath:append(os.getenv("HOME") .. "/.nvim-utils/package/*")
-vim.opt.runtimepath:append(os.getenv("HOME") .. "/.nvim-utils/package/*/after")
-
-require("synapse").setup({
-    opts = {
-        package_path = os.getenv("HOME") .. "/.nvim-utils/package",
-    },
-})
-```
-
-### 4.2 Custom Configuration Directory
-
-**Important**: Only files ending with `.config.lua` will be automatically recognized and loaded for plugin setup.
-
-There are two types of configuration directories:
-
-1. **`load_config`**: Directory for `.config.lua` files (auto-loaded and auto-setup)
-   - Files must end with `.config.lua` (e.g., `plugin.config.lua`)
-   - These files are automatically loaded and plugins are automatically set up
-   - Supports both `opts` (table) and `config` (function) formats
-
-2. **`config_path`**: Directory for `.lua` files (plugin installation only)
-   - Files end with `.lua` (e.g., `plugin.lua`)
-   - These files are only used for plugin installation configuration
-   - Do NOT use `.config.lua` extension here
-
-```lua
-require("synapse").setup({
-    opts = {
-        -- Directory to scan for .config.lua files (recursive)
-        -- Only files ending with .config.lua will be auto-loaded and auto-setup
-        load_config = vim.fn.stdpath("config") .. "/lua",
         
-        -- Directory to scan for plugin installation configs (.lua files)
-        -- Files here are only used for installation, not auto-setup
-        config_path = vim.fn.stdpath("config") .. "/lua/plugins",
+        -- Directory to scan for .config.lua files (optional)
+        -- Default: vim.fn.stdpath("config")
+        config_path = vim.fn.stdpath("config"),
     },
 })
 ```
 
-**Example**: Create `~/.config/nvim/lua/pkgs/example.config.lua` (note: must end with `.config.lua`):
+### Configuration Options
 
-```lua
--- Method 1: opts as table (automatically calls plugin.setup(opts))
--- opts must be a table type
-return {
-    repo = "username/plugin-name",
-    primary = "plugin-name",  -- Optional: specify require name
+#### `opts.package_path` (string)
+- **Description**: Directory where plugins will be installed
+- **Default**: `vim.fn.stdpath("data") .. "/package"`
+- **Example**: `"/home/user/.local/share/nvim/package"`
+
+#### `opts.config_path` (string)
+- **Description**: Directory to scan for `.config.lua` plugin configuration files (recursive)
+- **Default**: `vim.fn.stdpath("config")`
+- **Example**: `"/home/user/.config/nvim"`
+
+#### `opts.default` (string)
+- **Description**: Default plugin repository to install
+- **Default**: `"OriginCoderPulse/synapse.nvim"`
+
+#### `opts.ui.style` (string)
+- **Description**: UI window style
+- **Default**: `"float"`
+- **Options**: `"float"`, `"split"`
+
+#### `keys.download` (string)
+- **Description**: Keymap to open plugin installation UI
+- **Default**: `"<leader>si"`
+
+#### `keys.remove` (string)
+- **Description**: Keymap to open plugin removal UI
+- **Default**: `"<leader>sr"`
+
+#### `keys.upgrade` (string)
+- **Description**: Keymap to open plugin upgrade UI
+- **Default**: `"<leader>su"`
+
+## Plugin Configuration Files
+
+### File Format
+
+Create `.config.lua` files in your `config_path` directory (or subdirectories). These files support both plugin installation configuration and automatic setup.
+
+**Important**: Only files ending with `.config.lua` will be recognized and automatically processed.
+
+### Configuration File Structure
+
+Each `.config.lua` file must return a table with the following optional fields:
+
+#### Required Fields
+
+- **`repo`** (string): Plugin repository URL in format `"username/repository"`
+  - Example: `"nvim-lualine/lualine.nvim"`
+
+#### Installation Configuration Fields
+
+- **`tag`** (string): Lock plugin to a specific version tag
+  - Example: `"v1.2.3"`
+  - Takes precedence over `branch`
+
+- **`clone_conf.branch`** (string): Clone a specific branch
+  - Example: `{ branch = "main" }`
+  - Only used if `tag` is not specified
+
+- **`execute`** (string|table): Commands to run after installation/update
+  - Example (string): `"make"`
+  - Example (table): `{ "make", "cargo build --release" }`
+
+- **`primary`** (string): Custom plugin name for `require()`
+  - Use this if the actual require name differs from the extracted name
+  - Example: If repo is `"username/plugin-name"` but you require it as `"custom-name"`, set `primary = "custom-name"`
+
+- **`depend`** (table): Plugin dependencies
+  - Simple format: `{ "username/dependency" }`
+  - With configuration:
+    ```lua
+    {
+        "username/dependency",
+        primary = "custom-name",  -- Optional
+        opt = {                   -- Optional: configuration for dependency
+            option1 = "value1",
+        }
+    }
+    ```
+
+#### Auto-Setup Configuration Fields
+
+- **`opts`** (table): Configuration table passed to `plugin.setup(opts)`
+  - Automatically calls `plugin.setup(opts)` if the plugin has a `setup` function
+  - Example:
+    ```lua
     opts = {
-        -- Configuration options will be passed to plugin.setup()
         option1 = "value1",
         option2 = "value2",
-    },
-}
-    
--- Method 2: config as function (manual setup)
--- config must be a function type
--- The function receives the plugin reference as a parameter
-return {
-    repo = "username/plugin-name",
-    primary = "plugin-name",  -- Optional: specify require name
+    }
+    ```
+
+- **`config`** (function): Manual setup function
+  - Receives the plugin module as a parameter
+  - Use this for custom setup logic
+  - Example:
+    ```lua
     config = function(plugin)
-        -- plugin is the require("plugin-name") result
-        -- No need to manually require, it's already loaded
-        plugin.setup({
-            -- Your configuration
-        })
-    end,
-}
-```
+        plugin.setup({})
+        -- Additional setup code
+    end
+    ```
 
-**Important Notes**: 
-- **File naming**: Only files ending with `.config.lua` will be automatically loaded and set up
-- **`opts` format** (must be a **table** type) - Synapse will automatically:
-  1. Extract the plugin name from the `repo` field (or use `primary` if specified)
-  2. Try to `require` the plugin
-  3. Call `plugin.setup(opts_table)` if the plugin has a `setup` function
-- **`config` format** (must be a **function** type) - You have full control over plugin setup
-  - The function receives the plugin reference as a parameter: `config = function(plugin) ... end`
-
-#### Additional Configuration Options
-
-**`primary` field**: Specify the actual require name if it differs from the extracted name:
-
-```lua
-return {
-    repo = "username/plugin-name",
-    primary = "custom-plugin-name",  -- Use this as require name
-    opts = {
-        option1 = "value1",
-    },
-}
-```
-
-**`initialization` field**: Execute a function before plugin setup. The function receives a package wrapper that allows accessing plugin submodules:
-
-```lua
-return {
-    repo = "username/plugin-name",
+- **`initialization`** (function): Function executed before `plugin.setup()`
+  - Receives a package wrapper that allows accessing plugin submodules
+  - Use this to configure plugin submodules before setup
+  - Example:
+    ```lua
     initialization = function(package)
-        -- package is a wrapper that allows accessing plugin submodules
-        -- Access submodules using: package({ "submodule", "path" })
-        -- Or using method calls: package.submodule()
-        -- This runs before plugin.setup() is called
-    end,
-    opts = {
-        option1 = "value1",
-    },
-}
-```
+        -- Access submodules: package({ "submodule" }) or package.submodule
+        local install = package({ "install" })
+        install.prefer_git = true
+    end
+    ```
 
-### 4.3 Plugin Installation Configuration Format
+### Configuration Examples
 
-**Important**: Files in `config_path` directory are used **only for plugin installation**, not for auto-setup.
-
-- Use `.lua` extension (e.g., `example.lua`) in `config_path` directory
-- These files define which plugins to install, but do NOT automatically set them up
-- For auto-setup, create `.config.lua` files in `load_config` directory instead
-
-Create `.lua` files in your `config_path` directory to define which plugins to install:
-
-**Basic Format** (`config_path/example.lua` - note: `.lua` extension, NOT `.config.lua`):
+#### Basic Plugin Setup
 
 ```lua
-return {
-    -- Repository URL (required)
-    repo = "username/plugin-name",
-    
-    -- Dependencies (optional)
-    depend = {
-        -- String format (simple dependency)
-        "username/dependency-plugin",
-        
-        -- Table format with opt configuration
-        {
-            "username/another-dependency",
-            opt = {
-                -- Configuration options for the dependency
-                option1 = "value1",
-                option2 = "value2",
-            }
-        },
-        
-        -- Table format with primary and opt (same level)
-        {
-            "username/third-dependency",
-            primary = "custom-dep-name",  -- Specify require name
-            opt = {
-                -- Configuration options for the dependency
-                option1 = "value1",
-                option2 = "value2",
-            }
-        },
-    },
-    
-    -- Tag version (optional, takes precedence over branch)
-    tag = "v1.0.0",
-    
-    -- Branch (optional, only if no tag specified)
-    clone_conf = {
-        branch = "main",
-    },
-    
-    -- Post-install/update commands (optional)
-    execute = {
-        "make",
-        "cargo build --release",
-    },  -- Or use a single string: execute = "make"
-    
-    -- Primary plugin name (optional)
-    -- Use this if the require name differs from the extracted name
-    primary = "custom-plugin-name",
-    
-    -- Note: opts and config fields in config_path files are NOT automatically executed
-    -- They are only used for dependency configuration via the 'opt' field
-    -- For auto-setup, create a .config.lua file in load_config directory instead
-}
-```
-
-**Examples**:
-
-#### Installation Configuration Examples (`.lua` files in `config_path`)
-
-These files are used **only for plugin installation**, not for auto-setup:
-
-```lua
--- config_path/mason.config.lua (installation config only)
-return {
-    repo = "williamboman/mason.nvim",
-    depend = {
-        {
-            "williamboman/mason-lspconfig.nvim",
-            opt = {
-                ensure_installed = { "lua_ls", "pyright" },
-                automatic_installation = true,
-            }
-        },
-    },
-}
-```
-
-```lua
--- config_path/versioned.config.lua (installation config only)
-return {
-    repo = "username/plugin-name",
-    tag = "v1.2.3",  -- Lock to specific tag version
-}
-```
-
-```lua
--- config_path/compiled.lua (installation config only)
-return {
-    repo = "username/compiled-plugin",
-    execute = {
-        "make",
-        "cargo build --release",
-    },
-}
-```
-
-#### Auto-Setup Configuration Examples (`.config.lua` files in `load_config`)
-
-**Important**: Only files ending with `.config.lua` in `load_config` directory will be automatically loaded and set up.
-
-```lua
--- load_config/pkgs/lualine.config.lua (auto-setup with opts table)
+-- ~/.config/nvim/lua/pkgs/lualine.config.lua
 return {
     repo = "nvim-lualine/lualine.nvim",
-    primary = "lualine",  -- Optional: specify require name
+    primary = "lualine",
     opts = {
         options = {
             theme = "auto",
@@ -322,64 +198,48 @@ return {
 }
 ```
 
+#### Plugin with Manual Setup
+
 ```lua
--- load_config/pkgs/autopairs.config.lua (auto-setup with config function)
+-- ~/.config/nvim/lua/pkgs/autopairs.config.lua
 return {
     repo = "windwp/nvim-autopairs",
     primary = "nvim-autopairs",
     config = function(plugin)
-        -- plugin is the require("nvim-autopairs") result
         plugin.setup({})
-        
-        -- Setup cmp integration
-        local status, cmp = pcall(require, "cmp")
-        if status then
-            local autopairs_cmp = require("nvim-autopairs.completion.cmp")
-            if autopairs_cmp and autopairs_cmp.on_confirm_done then
-                cmp.event:on("confirm_done", autopairs_cmp.on_confirm_done)
-            end
-        end
+        -- Additional integration code
     end,
 }
 ```
 
-```lua
--- load_config/pkgs/custom-name.config.lua (auto-setup with primary field)
-return {
-    repo = "username/plugin-name",
-    primary = "custom-plugin-name",  -- Use this as require name
-    opts = {
-        option1 = "value1",
-    },
-}
-```
+#### Plugin with Initialization
 
 ```lua
--- load_config/pkgs/with-init.config.lua (auto-setup with initialization function)
+-- ~/.config/nvim/lua/pkgs/tree-sitter.config.lua
 return {
-    repo = "username/plugin-name",
-    primary = "plugin-name",
+    repo = "nvim-treesitter/nvim-treesitter",
+    primary = "nvim-treesitter",
     initialization = function(package)
-        -- Access plugin submodules before setup
-        -- package is a wrapper that supports: package({ "submodule" }) or package.submodule()
         local install = package({ "install" })
-        -- Or: local install = package.install()
+        install.prefer_git = true
     end,
     opts = {
-        option1 = "value1",
+        -- Tree-sitter configuration
     },
 }
 ```
 
+#### Plugin with Dependencies
+
 ```lua
--- load_config/pkgs/mason.config.lua (auto-setup with dependency configuration)
+-- ~/.config/nvim/lua/pkgs/mason.config.lua
 return {
     repo = "williamboman/mason.nvim",
     primary = "mason",
     depend = {
         {
             "williamboman/mason-lspconfig.nvim",
-            primary = "mason-lspconfig",  -- Specify require name
+            primary = "mason-lspconfig",
             opt = {
                 ensure_installed = { "lua_ls", "pyright" },
                 automatic_installation = true,
@@ -392,119 +252,95 @@ return {
 }
 ```
 
-### 4.4 Custom Keymaps
-
-You can customize the keymaps:
+#### Plugin with Version Lock
 
 ```lua
-require("synapse").setup({
-    keys = {
-        download = "<leader>i",  -- Install plugins
-        remove = "<leader>r",    -- Remove unused plugins
-        upgrade = "<leader>u",   -- Update plugins
-    },
-})
-```
-
-## Complete Configuration Example
-
-```lua
--- Add synapse.nvim to runtimepath (if using custom location)
-vim.opt.runtimepath:prepend(os.getenv("HOME") .. "/.nvim-utils/package/synapse.nvim")
-
-require("synapse").setup({
-    -- Git clone method: "ssh" or "https"
-    method = "https",
-    
+-- ~/.config/nvim/lua/pkgs/versioned.config.lua
+return {
+    repo = "username/plugin-name",
+    tag = "v1.2.3",
     opts = {
-        -- Custom plugin installation directory
-        package_path = os.getenv("HOME") .. "/.nvim-utils/package",
-        
-        -- Directory for plugin installation configs (.lua files)
-        config_path = os.getenv("HOME") .. "/.config/nvim/lua/plugins",
-        
-        -- Directory for plugin load configs (.config.lua files, auto-loaded)
-        load_config = os.getenv("HOME") .. "/.config/nvim/lua",
-        
-        -- UI customization
-        ui = {
-            style = "float",
-        },
+        option1 = "value1",
     },
-    
-    -- Custom keymaps
+}
+```
+
+#### Plugin with Build Commands
+
+```lua
+-- ~/.config/nvim/lua/pkgs/compiled.config.lua
+return {
+    repo = "username/compiled-plugin",
+    execute = {
+        "make",
+        "cargo build --release",
+    },
+    opts = {
+        option1 = "value1",
+    },
+}
+```
+
+## Commands
+
+- **`:SynapseDownload`**: Open plugin installation UI
+- **`:SynapseRemove`**: Open plugin removal UI
+- **`:SynapseUpgrade`**: Open plugin upgrade UI
+- **`:SynapseError`**: Show all error messages
+
+## Keymaps
+
+- **`<leader>si`**: Open plugin installation UI (SynapseDownload)
+- **`<leader>sr`**: Open plugin removal UI (SynapseRemove)
+- **`<leader>su`**: Open plugin upgrade UI (SynapseUpgrade)
+
+You can customize these keymaps in your configuration:
+
+```lua
+require("synapse").setup({
     keys = {
-        download = "<leader>i",
-        remove = "<leader>r",
-        upgrade = "<leader>u",
+        download = "<leader>pi",  -- Custom keymap
+        remove = "<leader>pr",
+        upgrade = "<leader>pu",
     },
 })
 ```
 
-**Note**: If using custom `package_path`, don't forget to add it to `runtimepath`:
+## How It Works
 
-```lua
-vim.opt.runtimepath:append(os.getenv("HOME") .. "/.nvim-utils/package/*")
-vim.opt.runtimepath:append(os.getenv("HOME") .. "/.nvim-utils/package/*/after")
-```
+1. **Installation**: Create `.config.lua` files in your `config_path` directory
+2. **Auto-Setup**: On Neovim startup, Synapse scans for `.config.lua` files and automatically:
+   - Loads plugin configurations
+   - Calls `plugin.setup(opts)` for plugins with `opts` field
+   - Executes `config` function for plugins with `config` field
+   - Applies dependency configurations
 
-## Dependency Management
-
-Synapse automatically handles plugin dependencies:
-
-1. **Auto-install**: Dependencies are installed automatically
-2. **Deduplication**: Shared dependencies are installed only once
-3. **Priority**: If a dependency is also a main plugin, its configuration takes precedence
-4. **Protection**: Dependencies are protected during removal unless unused
-5. **Configuration with `opt`**: Dependencies can be configured using the `opt` field
-
-**Loading Order**:
-1. All `.config.lua` files from `load_config` directory are loaded first (main plugins are automatically set up)
-2. Then dependencies with `opt` are configured (ensuring proper initialization order)
-
-**File Naming Rules**:
-- **`.config.lua` files** (in `load_config` directory): Automatically loaded and plugins are automatically set up
-- **`.lua` files** (in `config_path` directory): Used only for plugin installation configuration, NOT auto-setup
-
-This ensures that if `plugin-a` depends on `plugin-b`, and both have configurations, `plugin-b` will be set up before `plugin-a`'s dependency configuration is applied.
-
-**Plugin Name Resolution**:
-
-Synapse automatically extracts plugin names from the `repo` field, but you can override this using the `primary` field. The resolution order is:
-
-1. `primary` field (if specified) - highest priority
-2. Extract from `repo` field (e.g., "user/plugin-name" -> "plugin-name")
-3. Extract from module name (e.g., "pkgs.plugin.config" -> "plugin")
-4. Extract from file path
-
-If `primary` is not specified, Synapse will try multiple variations when requiring the plugin:
-- Original extracted name
-- Lowercase version (if contains uppercase)
-- Without "-nvim" or ".nvim" suffix
-
-This helps handle different plugin naming conventions automatically.
+3. **Loading Order**:
+   - Main plugins are set up first
+   - Then dependency configurations are applied
 
 ## Troubleshooting
 
 ### Plugins Not Recognized
 
-- **For plugin installation**: Ensure installation configuration files (`.lua`) are in `config_path` (supports subdirectories)
-- **For auto-setup**: Ensure configuration files end with `.config.lua` and are in `load_config` directory
+- Ensure configuration files end with `.config.lua` and are in `config_path` directory (supports subdirectories)
 - Check that files return a table with a `repo` field
 - Verify `repo` field is not empty
-- **Important**: Only `.config.lua` files are automatically loaded and set up. Regular `.lua` files in `config_path` are only used for installation.
+
+### Plugins Not Set Up
+
+- Verify the plugin has a `setup` function if using `opts` format
+- Check that `opts` is a table type (not a function)
+- For manual setup, use `config` function format
+- Ensure the plugin is properly installed before setup
 
 ### Keymaps Not Working
 
-- Ensure `leader` key is set before `synapse.setup()` is called
-- Check that keymaps are not overridden by other configurations
-
-### Dependencies Not Installed
-
-- Check `depend` field format (array of strings or tables)
-- Verify repository URLs are correct
-- Check network connectivity
+- Verify keymaps are not conflicting with other plugins
+- Check that the setup function was called correctly
+- Try using commands directly: `:SynapseDownload`, `:SynapseRemove`, `:SynapseUpgrade`
 
 ## License
 
-MIT License
+See LICENSE file for details.
+
