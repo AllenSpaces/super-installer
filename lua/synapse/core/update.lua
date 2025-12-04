@@ -421,7 +421,10 @@ function M.checkPlugin(plugin, packagePath, pluginConfig, callback)
 	
 	-- Get plugin info to determine installation path
 	local isMainPlugin, mainPluginName = jsonState.getPluginInfo(packagePath, pluginName)
-	local installDir = gitUtils.getInstallDir(pluginName, "update", packagePath, isMainPlugin, mainPluginName)
+	-- Check if it's a shared dependency (in public folder)
+	local publicPath = string.format("%s/public/%s", packagePath, pluginName)
+	local isSharedDependency = vim.fn.isdirectory(publicPath) == 1
+	local installDir = gitUtils.getInstallDir(pluginName, "update", packagePath, isMainPlugin, mainPluginName, isSharedDependency)
 	if vim.fn.isdirectory(installDir) ~= 1 then
 		return callback(false, "Directory is not found")
 	end
@@ -499,7 +502,10 @@ function M.updatePlugin(plugin, packagePath, pluginConfig, isMainPluginParam, co
 	if isMainPlugin == false and mainPluginName == nil then
 		isMainPlugin = isMainPluginParam
 	end
-	local installDir = gitUtils.getInstallDir(pluginName, "update", packagePath, isMainPlugin, mainPluginName)
+	-- Check if it's a shared dependency (in public folder)
+	local publicPath = string.format("%s/public/%s", packagePath, pluginName)
+	local isSharedDependency = vim.fn.isdirectory(publicPath) == 1
+	local installDir = gitUtils.getInstallDir(pluginName, "update", packagePath, isMainPlugin, mainPluginName, isSharedDependency)
 
 	-- Get tag and branch from config (branch comes from cloneConf.branch)
 	local configTag = pluginConfig and pluginConfig.tag or nil
@@ -512,7 +518,10 @@ function M.updatePlugin(plugin, packagePath, pluginConfig, isMainPluginParam, co
 	local function reinstall(reason)
 		local installModule = require("synapse.core.install")
 		local gitMethod = (config and config.method) or "https"
-		installModule.installPlugin(pluginConfig, gitMethod, packagePath, isMainPlugin or isMainPluginParam, nil, function(ok, err)
+		-- Check if it's a shared dependency
+		local publicPath = string.format("%s/public/%s", packagePath, pluginName)
+		local isSharedDep = vim.fn.isdirectory(publicPath) == 1
+		installModule.installPlugin(pluginConfig, gitMethod, packagePath, isMainPlugin or isMainPluginParam, nil, isSharedDep, function(ok, err)
 			if not ok then
 				return callback(false, (reason or "Reinstall failed") .. ": " .. (err or "Unknown error"))
 			end

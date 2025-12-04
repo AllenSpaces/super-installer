@@ -6,8 +6,9 @@ local M = {}
 --- @param packagePath string Base package installation path
 --- @param isMainPlugin boolean|nil Whether this is a main plugin (default: true)
 --- @param mainPluginName string|nil Main plugin name if this is a dependency
+--- @param isSharedDependency boolean|nil Whether this is a shared dependency (used by multiple plugins)
 --- @return string Full installation directory path
-function M.getInstallDir(plugin, commandType, packagePath, isMainPlugin, mainPluginName)
+function M.getInstallDir(plugin, commandType, packagePath, isMainPlugin, mainPluginName, isSharedDependency)
 	assert(type(plugin) == "string", "Invalid plugin name: " .. tostring(plugin))
 	assert(type(commandType) == "string", "Invalid type parameter: " .. tostring(commandType))
 	assert(type(packagePath) == "string", "Invalid packagePath: " .. tostring(packagePath))
@@ -29,12 +30,17 @@ function M.getInstallDir(plugin, commandType, packagePath, isMainPlugin, mainPlu
 		-- Main plugin: package_path/plugin-name/plugin-name/
 		return string.format("%s/%s/%s", packagePath, pluginName, pluginName)
 	else
-		-- Dependency: package_path/main-plugin-name/depend/dependency-name/
-		if mainPluginName then
-			return string.format("%s/%s/depend/%s", packagePath, mainPluginName, pluginName)
+		-- Shared dependency: package_path/public/dependency-name/
+		if isSharedDependency then
+			return string.format("%s/public/%s", packagePath, pluginName)
 		else
-			-- Fallback: if no main plugin name provided, use old structure
-			return string.format("%s/%s", packagePath, pluginName)
+			-- Single dependency: package_path/main-plugin-name/depend/dependency-name/
+			if mainPluginName then
+				return string.format("%s/%s/depend/%s", packagePath, mainPluginName, pluginName)
+			else
+				-- Fallback: if no main plugin name provided, use old structure
+				return string.format("%s/%s", packagePath, pluginName)
+			end
 		end
 	end
 end

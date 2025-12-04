@@ -110,6 +110,14 @@ function M.start(config)
 			existingPlugins[depName] = true
 		end
 	end
+	
+	-- Check shared dependencies in public folder
+	for _, path in ipairs(vim.split(vim.fn.glob(installDir .. "/public/*"), "\n")) do
+		if vim.fn.isdirectory(path) == 1 then
+			local depName = vim.fn.fnamemodify(path, ":t")
+			existingPlugins[depName] = true
+		end
+	end
 
 	-- Collect all plugins to install (including dependencies)
 	-- First build main plugin map (for checking if dependency is also a main plugin)
@@ -202,6 +210,37 @@ function M.start(config)
 		end
 	end
 	
+	-- Migrate shared dependencies before checking what needs to be installed
+	-- If a dependency is used by multiple plugins and already exists in a single plugin's depend folder,
+	-- move it to public folder
+	for depRepo, mainPluginReposList in pairs(depToMainPlugins) do
+		if #mainPluginReposList > 1 then
+			-- This is a shared dependency
+			local depName = stringUtils.getPluginName(depRepo)
+			local publicPath = string.format("%s/public/%s", installDir, depName)
+			local publicExists = vim.fn.isdirectory(publicPath) == 1
+			
+			if not publicExists then
+				-- Check if it exists in any single plugin's depend folder
+				for _, mainRepo in ipairs(mainPluginReposList) do
+					local mainPluginName = stringUtils.getPluginName(mainRepo)
+					local oldPath = string.format("%s/%s/depend/%s", installDir, mainPluginName, depName)
+					if vim.fn.isdirectory(oldPath) == 1 then
+						-- Need to migrate: create public directory and move
+						local publicDir = string.format("%s/public", installDir)
+						if vim.fn.isdirectory(publicDir) ~= 1 then
+							vim.fn.mkdir(publicDir, "p")
+						end
+						-- Move the dependency
+						local moveCmd = string.format("mv %s %s", vim.fn.shellescape(oldPath), vim.fn.shellescape(publicPath))
+						vim.fn.system(moveCmd)
+						break -- Only move once
+					end
+				end
+			end
+		end
+	end
+	
 	-- Convert to list and filter already installed plugins, ensure dependencies are installed before main plugins
 	local pendingInstall = {}
 	local dependencies = {}
@@ -218,13 +257,22 @@ function M.start(config)
 		
 		-- Check if plugin is already installed
 		local isInstalled = false
-		if mainPluginRepos[repo] then
+		if pluginName == "synapse" or pluginName == "synapse.nvim" then
+			-- Special handling for synapse: check package_path/synapse.nvim/
+			local synapsePath = string.format("%s/synapse.nvim", installDir)
+			isInstalled = vim.fn.isdirectory(synapsePath) == 1
+		elseif mainPluginRepos[repo] then
 			-- For main plugin, check if package_path/plugin-name/plugin-name/ exists
 			local mainPluginPath = string.format("%s/%s/%s", installDir, pluginName, pluginName)
 			isInstalled = vim.fn.isdirectory(mainPluginPath) == 1
 		else
-			-- For dependency, check if it exists in any depend folder
+			-- For dependency, check if it exists in any depend folder or public folder
 			isInstalled = existingPlugins[pluginName] == true
+			-- Also check public folder explicitly
+			if not isInstalled then
+				local publicPath = string.format("%s/public/%s", installDir, pluginName)
+				isInstalled = vim.fn.isdirectory(publicPath) == 1
+			end
 		end
 		
 		if not isInstalled then
@@ -368,11 +416,14 @@ function M.start(config)
 
 			-- Get list of main plugins that this dependency belongs to
 			local parentMainPlugins = nil
+			local isSharedDependency = false
 			if not isMainPlugin then
 				parentMainPlugins = depToMainPlugins[pluginConfig.repo] or {}
+				-- Check if this dependency is shared (used by multiple main plugins)
+				isSharedDependency = #parentMainPlugins > 1
 			end
 			
-			local jobId = M.installPlugin(pluginConfig, config.method, config.opts.package_path, isMainPlugin, parentMainPlugins, function(success, err)
+			local jobId = M.installPlugin(pluginConfig, config.method, config.opts.package_path, isMainPlugin, parentMainPlugins, isSharedDependency, function(success, err)
 				runningCount = runningCount - 1
 				completed = completed + 1
 
@@ -420,7 +471,7 @@ end
 --- @param parentMainPlugins table|nil List of main plugin repos that depend on this plugin
 --- @param callback function Callback function(success, err)
 --- @return number|nil jobId Job ID for tracking
-function M.installPlugin(pluginConfig, gitConfig, packagePath, isMainPlugin, parentMainPlugins, callback)
+function M.installPlugin(pluginConfig, gitConfig, packagePath, isMainPlugin, parentMainPlugins, isSharedDependency, callback)
 	if not installationActive then
 		return
 	end
@@ -435,7 +486,14 @@ function M.installPlugin(pluginConfig, gitConfig, packagePath, isMainPlugin, par
 		mainPluginName = stringUtils.getPluginName(parentMainPlugins[1])
 	end
 	
-	local targetDir = gitUtils.getInstallDir(pluginName, "start", packagePath, isMainPlugin, mainPluginName)
+	-- Check if this dependency is shared (used by multiple main plugins)
+	-- Note: Migration is already handled before installation check
+	local actualIsShared = isSharedDependency or false
+	if not isMainPlugin and parentMainPlugins and #parentMainPlugins > 1 then
+		actualIsShared = true
+	end
+	
+	local targetDir = gitUtils.getInstallDir(pluginName, "start", packagePath, isMainPlugin, mainPluginName, actualIsShared)
 	
 	-- Determine branch and tag: if plugin already exists, try to get from synapse.json first
 	-- But prioritize config tag if it exists
@@ -462,6 +520,7 @@ function M.installPlugin(pluginConfig, gitConfig, packagePath, isMainPlugin, par
 
 	-- Ensure parent directories exist for new directory structure
 	-- Special handling for synapse plugin: it's directly in package_path/synapse.nvim/
+	-- Note: Migration of shared dependencies is handled before installation check
 	if pluginName == "synapse" or pluginName == "synapse.nvim" then
 		-- Synapse plugin doesn't need parent directory creation, it's directly in package_path
 	elseif vim.fn.isdirectory(targetDir) ~= 1 then
@@ -472,11 +531,19 @@ function M.installPlugin(pluginConfig, gitConfig, packagePath, isMainPlugin, par
 				vim.fn.mkdir(parentDir, "p")
 			end
 		else
-			-- For dependency: create package_path/main-plugin-name/depend/ directory
-			if mainPluginName then
-				local dependDir = string.format("%s/%s/depend", packagePath, mainPluginName)
-				if vim.fn.isdirectory(dependDir) ~= 1 then
-					vim.fn.mkdir(dependDir, "p")
+			if actualIsShared then
+				-- For shared dependency: create package_path/public/ directory
+				local publicDir = string.format("%s/public", packagePath)
+				if vim.fn.isdirectory(publicDir) ~= 1 then
+					vim.fn.mkdir(publicDir, "p")
+				end
+			else
+				-- For single dependency: create package_path/main-plugin-name/depend/ directory
+				if mainPluginName then
+					local dependDir = string.format("%s/%s/depend", packagePath, mainPluginName)
+					if vim.fn.isdirectory(dependDir) ~= 1 then
+						vim.fn.mkdir(dependDir, "p")
+					end
 				end
 			end
 		end

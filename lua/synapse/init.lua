@@ -10,6 +10,7 @@ function M.setup(userConfig)
 	-- Add runtimepath for new directory structure:
 	-- Main plugins: package_path/plugin-name/plugin-name/
 	-- Dependencies: package_path/plugin-name/depend/dependency-name/
+	-- Shared dependencies: package_path/public/dependency-name/
 	-- The /**/* pattern will match all nested directories
 	vim.opt.rtp:append(mergedConfig.opts.package_path .. "/**/*")
 	vim.opt.rtp:append(mergedConfig.opts.package_path .. "/*/after")

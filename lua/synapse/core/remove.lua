@@ -283,7 +283,10 @@ end
 function M.removePlugin(pluginName, packagePath, callback)
 	-- Get plugin info to determine installation path
 	local isMainPlugin, mainPluginName = jsonState.getPluginInfo(packagePath, pluginName)
-	local installPath = gitUtils.getInstallDir(pluginName, "start", packagePath, isMainPlugin, mainPluginName)
+	-- Check if it's a shared dependency (in public folder)
+	local publicPath = string.format("%s/public/%s", packagePath, pluginName)
+	local isSharedDependency = vim.fn.isdirectory(publicPath) == 1
+	local installPath = gitUtils.getInstallDir(pluginName, "start", packagePath, isMainPlugin, mainPluginName, isSharedDependency)
 
 	if vim.fn.isdirectory(installPath) ~= 1 then
 		callback(true)

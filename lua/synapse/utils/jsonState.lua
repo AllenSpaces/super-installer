@@ -440,7 +440,13 @@ function M.getPluginInfo(packagePath, pluginName)
 		return true, nil
 	end
 	
-	-- Check if it's in a depend folder
+	-- Check if it's in public folder (shared dependency)
+	local publicPath = string.format("%s/public/%s", packagePath, pluginName)
+	if vim.fn.isdirectory(publicPath) == 1 then
+		return false, nil -- Shared dependency, no specific main plugin
+	end
+	
+	-- Check if it's in a depend folder (single dependency)
 	if data and data.plugins then
 		for _, plugin in ipairs(data.plugins) do
 			local dependPath = string.format("%s/%s/depend/%s", packagePath, plugin.name, pluginName)
