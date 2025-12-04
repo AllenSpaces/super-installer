@@ -40,11 +40,13 @@ use {
 ### Manual Installation
 
 1. Clone the repository:
+
 ```bash
 git clone https://github.com/OriginCoderPulse/synapse.nvim.git ~/.config/nvim/lua/synapse
 ```
 
 2. Add to your Neovim configuration:
+
 ```lua
 require("synapse").setup({})
 ```
@@ -58,12 +60,12 @@ require("synapse").setup({
     opts = {
         -- Custom plugin installation directory (optional)
         package_path = os.getenv("HOME") .. "/.nvim-utils/package",
-        
+
         -- Directory to scan for .config.lua files (optional)
         -- Default: vim.fn.stdpath("config")
         config_path = vim.fn.stdpath("config"),
     },
-    
+
     -- Import field: Load configurations from non-standard files
     -- Supports arbitrary depth nested structures
     imports = {
@@ -79,28 +81,34 @@ require("synapse").setup({
 ### Configuration Options
 
 #### `opts.package_path` (string)
+
 - **Description**: Directory where plugins will be installed
 - **Default**: `vim.fn.stdpath("data") .. "/package"`
 - **Example**: `"/home/user/.local/share/nvim/package"`
 
 #### `opts.config_path` (string)
+
 - **Description**: Directory to scan for `.config.lua` plugin configuration files (recursive)
 - **Default**: `vim.fn.stdpath("config")`
 - **Example**: `"/home/user/.config/nvim"`
 
 #### `opts.default` (string)
+
 - **Description**: Default plugin repository to install
 - **Default**: `"OriginCoderPulse/synapse.nvim"`
 
 #### `opts.ui.style` (string)
+
 - **Description**: UI window style
 - **Default**: `"float"`
 - **Options**: `"float"`, `"split"`
 
 #### `imports` (table)
+
 - **Description**: Import configurations from non-standard files. Supports arbitrary depth nested structures
 - **Format**: Nested table structure where keys represent directory paths and values represent filenames
 - **Example**:
+
   ```lua
   imports = {
       lua = {
@@ -112,26 +120,29 @@ require("synapse").setup({
       },
   }
   ```
-  
+
   **The above configuration will load:**
   1. `config_path/lua/config1.lua` (from array element at lua level)
   2. `config_path/lua/test/config2.lua` (from array element at test level)
   3. `config_path/lua/test/test1/config3.lua` (from nested structure)
-  
+
   **Rules:**
   - Array elements (numeric keys with string values) are appended directly to the current path
   - String keys create subdirectories and continue recursion
   - Mixed arrays and string keys in the same table are both processed
 
 #### `keys.download` (string)
+
 - **Description**: Keymap to open plugin installation UI
 - **Default**: `"<leader>si"`
 
 #### `keys.remove` (string)
+
 - **Description**: Keymap to open plugin removal UI
 - **Default**: `"<leader>sr"`
 
 #### `keys.upgrade` (string)
+
 - **Description**: Keymap to open plugin upgrade UI
 - **Default**: `"<leader>su"`
 
@@ -211,12 +222,13 @@ Each `.config.lua` file must return a table with the following optional fields:
   - Supports arbitrary depth nested structures for accessing submodules
   - Use this to configure plugin submodules before setup
   - Example:
+
     ```lua
     initialization = function(package)
         -- Access submodules: package({ "submodule" }) or package.submodule
         local install = package({ "install" })
         install.prefer_git = true
-        
+
         -- Support for nested structures
         local nested = package({ test = { test1 = { "ok" } } })
     end

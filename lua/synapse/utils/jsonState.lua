@@ -415,5 +415,70 @@ function M.addDependencyToMainPlugin(packagePath, mainPluginName, depRepo)
 	-- If main plugin not found in json, it will be created when main plugin is installed
 end
 
+--- Get plugin information (is main plugin, and which main plugin it belongs to if it's a dependency)
+--- @param packagePath string Base package installation path
+--- @param pluginName string Plugin name to check
+--- @return boolean isMainPlugin Whether this is a main plugin
+--- @return string|nil mainPluginName Main plugin name if this is a dependency, nil otherwise
+function M.getPluginInfo(packagePath, pluginName)
+	local jsonPath = jsonUtils.getJsonPath(packagePath)
+	local data, _ = jsonUtils.read(jsonPath)
+	
+	-- Special handling for synapse plugin: it's directly in package_path/synapse.nvim/
+	if pluginName == "synapse" or pluginName == "synapse.nvim" then
+		local synapsePath = string.format("%s/synapse.nvim", packagePath)
+		if vim.fn.isdirectory(synapsePath) == 1 then
+			return true, nil
+		end
+		-- If not found, still return as main plugin (for new installations)
+		return true, nil
+	end
+	
+	-- First check directory structure (most reliable for existing plugins)
+	local mainPluginPath = string.format("%s/%s/%s", packagePath, pluginName, pluginName)
+	if vim.fn.isdirectory(mainPluginPath) == 1 then
+		return true, nil
+	end
+	
+	-- Check if it's in a depend folder
+	if data and data.plugins then
+		for _, plugin in ipairs(data.plugins) do
+			local dependPath = string.format("%s/%s/depend/%s", packagePath, plugin.name, pluginName)
+			if vim.fn.isdirectory(dependPath) == 1 then
+				return false, plugin.name
+			end
+		end
+	end
+	
+	-- Then check JSON data
+	if data and data.plugins then
+		-- Check if it's a main plugin
+		for _, plugin in ipairs(data.plugins) do
+			if plugin.name == pluginName then
+				return true, nil
+			end
+		end
+		
+		-- Check if it's a dependency and find which main plugin it belongs to
+		for _, plugin in ipairs(data.plugins) do
+			if plugin.depend and type(plugin.depend) == "table" then
+				for _, depItem in ipairs(plugin.depend) do
+					local depRepo = configLoader.parseDependency(depItem)
+					if depRepo then
+						local depName = stringUtils.getPluginName(depRepo)
+						if depName == pluginName then
+							return false, plugin.name
+						end
+					end
+				end
+			end
+		end
+	end
+	
+	-- Default: assume it's a main plugin if we can't determine
+	-- This is safe for new installations
+	return true, nil
+end
+
 return M
 

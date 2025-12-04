@@ -59,11 +59,25 @@ function M.start(config)
 		-- Only process directories (plugins are directories, not files)
 		if vim.fn.isdirectory(path) == 1 then
 			local name = vim.fn.fnamemodify(path, ":t")
-			if not requiredPlugins[name] and name ~= "synapse" and name ~= "synapse.nvim" then
-				table.insert(removalCandidates, name)
+			-- Skip synapse plugin and synapse.json file
+			if name == "synapse" or name == "synapse.nvim" or name == "synapse.json" then
+				goto continue
 			end
+			
+			-- Check if this is a main plugin directory (should have plugin-name/plugin-name/ structure)
+			local mainPluginPath = string.format("%s/%s/%s", packagePath, name, name)
+			if vim.fn.isdirectory(mainPluginPath) == 1 then
+				-- This is a main plugin directory
+				if not requiredPlugins[name] then
+					table.insert(removalCandidates, name)
+				end
+			end
+			-- Dependencies are under main-plugin-name/depend/, so they will be removed when main plugin is removed
 		end
+		::continue::
 	end
+	
+	-- Note: synapse.nvim is not included in removal candidates as it's managed separately
 
 	if #removalCandidates == 0 then
 		-- No plugins to remove, return directly without updating json
@@ -127,7 +141,10 @@ function M.start(config)
 					if pluginConfig.repo then
 						local pluginName = pluginConfig.repo:match("([^/]+)$")
 						pluginName = pluginName:gsub("%.git$", "")
-						local installDir = gitUtils.getInstallDir(pluginName, "start", savedConfig.opts.package_path)
+						
+						-- Get plugin info to determine installation path
+						local isMainPlugin, mainPluginName = jsonState.getPluginInfo(savedConfig.opts.package_path, pluginName)
+						local installDir = gitUtils.getInstallDir(pluginName, "start", savedConfig.opts.package_path, isMainPlugin, mainPluginName)
 						
 						-- Only update installed main plugins
 						if vim.fn.isdirectory(installDir) == 1 then
@@ -264,7 +281,9 @@ end
 --- @param callback function Callback function(success, err)
 --- @return number|nil jobId Job ID for tracking
 function M.removePlugin(pluginName, packagePath, callback)
-	local installPath = gitUtils.getInstallDir(pluginName, "start", packagePath)
+	-- Get plugin info to determine installation path
+	local isMainPlugin, mainPluginName = jsonState.getPluginInfo(packagePath, pluginName)
+	local installPath = gitUtils.getInstallDir(pluginName, "start", packagePath, isMainPlugin, mainPluginName)
 
 	if vim.fn.isdirectory(installPath) ~= 1 then
 		callback(true)
@@ -274,26 +293,53 @@ function M.removePlugin(pluginName, packagePath, callback)
 	-- Get dependencies from synapse.json
 	local dependencies = jsonState.getPluginDependencies(packagePath, pluginName)
 	
+	-- If this is a main plugin, remove the entire plugin directory (including depend folder)
+	-- Otherwise, just remove the dependency directory
+	local removePath = installPath
+	if isMainPlugin then
+		-- Remove entire main plugin directory: package_path/plugin-name/
+		-- This will also remove all dependencies in the depend folder
+		removePath = string.format("%s/%s", packagePath, pluginName)
+	else
+		-- Remove just the dependency directory
+		removePath = installPath
+	end
+	
 	-- Remove the plugin
-	local cmd = string.format("rm -rf %s", vim.fn.shellescape(installPath))
+	local cmd = string.format("rm -rf %s", vim.fn.shellescape(removePath))
 	local jobId = gitUtils.executeCommand(cmd, function(success, err)
 		if success then
 			-- Remove from synapse.json
 			jsonState.removePluginEntry(packagePath, pluginName)
 			
 			-- Check and remove unreferenced dependencies
-			if dependencies and #dependencies > 0 then
+			-- Note: If this is a main plugin, dependencies are already removed with the directory
+			-- But we still need to clean up JSON entries for dependencies that are not referenced elsewhere
+			if dependencies and #dependencies > 0 and not isMainPlugin then
+				-- Only process dependencies if this is not a main plugin
+				-- (main plugin removal already deletes all dependencies in depend folder)
 				for _, depRepo in ipairs(dependencies) do
 					local depName = stringUtils.getPluginName(depRepo)
 					-- Check if dependency is referenced by other plugins
 					if not jsonState.isDependencyReferenced(depName, packagePath, pluginName) then
-						-- Remove unreferenced dependency
-						local depPath = gitUtils.getInstallDir(depName, "start", packagePath)
+						-- Remove unreferenced dependency (dependencies are always under main plugin's depend folder)
+						local depPath = gitUtils.getInstallDir(depName, "start", packagePath, false, mainPluginName)
 						if vim.fn.isdirectory(depPath) == 1 then
 							local depCmd = string.format("rm -rf %s", vim.fn.shellescape(depPath))
 							gitUtils.executeCommand(depCmd, function() end)
 							jsonState.removePluginEntry(packagePath, depName)
 						end
+					end
+				end
+			elseif dependencies and #dependencies > 0 and isMainPlugin then
+				-- For main plugins, just clean up JSON entries for dependencies
+				-- The directories are already removed with the main plugin directory
+				for _, depRepo in ipairs(dependencies) do
+					local depName = stringUtils.getPluginName(depRepo)
+					-- Check if dependency is referenced by other plugins
+					if not jsonState.isDependencyReferenced(depName, packagePath, pluginName) then
+						-- Just remove from JSON, directory is already gone
+						jsonState.removePluginEntry(packagePath, depName)
 					end
 				end
 			end

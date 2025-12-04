@@ -7,7 +7,11 @@ local M = {}
 --- @param userConfig table|nil User configuration table
 function M.setup(userConfig)
 	local mergedConfig = config.merge(userConfig)
-	vim.opt.rtp:append(mergedConfig.opts.package_path .. "/*")
+	-- Add runtimepath for new directory structure:
+	-- Main plugins: package_path/plugin-name/plugin-name/
+	-- Dependencies: package_path/plugin-name/depend/dependency-name/
+	-- The /**/* pattern will match all nested directories
+	vim.opt.rtp:append(mergedConfig.opts.package_path .. "/**/*")
 	vim.opt.rtp:append(mergedConfig.opts.package_path .. "/*/after")
 
 	-- Load configs (including dependency opt configurations and imports)

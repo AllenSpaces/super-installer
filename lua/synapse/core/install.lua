@@ -76,9 +76,39 @@ function M.start(config)
 
 	local installDir = config.opts.package_path
 
+	-- Check existing plugins with new directory structure
+	-- Main plugins: package_path/plugin-name/plugin-name/
+	-- Dependencies: package_path/main-plugin-name/depend/dependency-name/
+	-- Special: synapse plugin is directly in package_path/synapse.nvim/
 	local existingPlugins = {}
+	
+	-- Check synapse plugin (special location)
+	local synapsePath = string.format("%s/synapse.nvim", installDir)
+	if vim.fn.isdirectory(synapsePath) == 1 then
+		existingPlugins["synapse.nvim"] = true
+		existingPlugins["synapse"] = true
+	end
+	
 	for _, path in ipairs(vim.split(vim.fn.glob(installDir .. "/*"), "\n")) do
-		existingPlugins[vim.fn.fnamemodify(path, ":t")] = true
+		if vim.fn.isdirectory(path) == 1 then
+			local pluginName = vim.fn.fnamemodify(path, ":t")
+			-- Skip synapse.nvim as it's already checked above
+			if pluginName ~= "synapse.nvim" and pluginName ~= "synapse" then
+				-- Check if this is a main plugin directory (has plugin-name/plugin-name/ structure)
+				local mainPluginPath = string.format("%s/%s/%s", installDir, pluginName, pluginName)
+				if vim.fn.isdirectory(mainPluginPath) == 1 then
+					existingPlugins[pluginName] = true
+				end
+			end
+		end
+	end
+	
+	-- Also check dependencies in depend folders
+	for _, path in ipairs(vim.split(vim.fn.glob(installDir .. "/*/depend/*"), "\n")) do
+		if vim.fn.isdirectory(path) == 1 then
+			local depName = vim.fn.fnamemodify(path, ":t")
+			existingPlugins[depName] = true
+		end
 	end
 
 	-- Collect all plugins to install (including dependencies)
@@ -180,7 +210,24 @@ function M.start(config)
 	for repo, pluginConfig in pairs(allPlugins) do
 		local pluginName = repo:match("([^/]+)$")
 		pluginName = pluginName:gsub("%.git$", "")
-		if not existingPlugins[pluginName] and pluginName ~= "synapse" and pluginName ~= "synapse.nvim" then
+		
+		-- Skip synapse plugin itself
+		if pluginName == "synapse" or pluginName == "synapse.nvim" then
+			goto continue
+		end
+		
+		-- Check if plugin is already installed
+		local isInstalled = false
+		if mainPluginRepos[repo] then
+			-- For main plugin, check if package_path/plugin-name/plugin-name/ exists
+			local mainPluginPath = string.format("%s/%s/%s", installDir, pluginName, pluginName)
+			isInstalled = vim.fn.isdirectory(mainPluginPath) == 1
+		else
+			-- For dependency, check if it exists in any depend folder
+			isInstalled = existingPlugins[pluginName] == true
+		end
+		
+		if not isInstalled then
 			-- If it's a main plugin, add to main plugins list
 			if mainPluginRepos[repo] then
 				table.insert(mainPlugins, pluginConfig)
@@ -189,6 +236,7 @@ function M.start(config)
 				table.insert(dependencies, pluginConfig)
 			end
 		end
+		::continue::
 	end
 	
 	-- Add dependencies first, then main plugins, to ensure dependencies are installed first
@@ -379,7 +427,15 @@ function M.installPlugin(pluginConfig, gitConfig, packagePath, isMainPlugin, par
 
 	local repo = pluginConfig.repo
 	local pluginName = stringUtils.getPluginName(repo)
-	local targetDir = gitUtils.getInstallDir(pluginName, "start", packagePath)
+	
+	-- Determine main plugin name for dependencies
+	local mainPluginName = nil
+	if not isMainPlugin and parentMainPlugins and #parentMainPlugins > 0 then
+		-- Use the first parent main plugin name
+		mainPluginName = stringUtils.getPluginName(parentMainPlugins[1])
+	end
+	
+	local targetDir = gitUtils.getInstallDir(pluginName, "start", packagePath, isMainPlugin, mainPluginName)
 	
 	-- Determine branch and tag: if plugin already exists, try to get from synapse.json first
 	-- But prioritize config tag if it exists
@@ -403,6 +459,28 @@ function M.installPlugin(pluginConfig, gitConfig, packagePath, isMainPlugin, par
 	end
 	
 	local repoUrl = gitUtils.getRepoUrl(repo, gitConfig)
+
+	-- Ensure parent directories exist for new directory structure
+	-- Special handling for synapse plugin: it's directly in package_path/synapse.nvim/
+	if pluginName == "synapse" or pluginName == "synapse.nvim" then
+		-- Synapse plugin doesn't need parent directory creation, it's directly in package_path
+	elseif vim.fn.isdirectory(targetDir) ~= 1 then
+		if isMainPlugin then
+			-- For main plugin: create package_path/plugin-name/ directory
+			local parentDir = string.format("%s/%s", packagePath, pluginName)
+			if vim.fn.isdirectory(parentDir) ~= 1 then
+				vim.fn.mkdir(parentDir, "p")
+			end
+		else
+			-- For dependency: create package_path/main-plugin-name/depend/ directory
+			if mainPluginName then
+				local dependDir = string.format("%s/%s/depend", packagePath, mainPluginName)
+				if vim.fn.isdirectory(dependDir) ~= 1 then
+					vim.fn.mkdir(dependDir, "p")
+				end
+			end
+		end
+	end
 
 	local command
 	if vim.fn.isdirectory(targetDir) == 1 then

@@ -70,8 +70,29 @@ function M.start(config)
 	end
 
 	-- Extract all repo fields (including dependencies)
+	-- Include synapse plugin itself in update list
 	local plugins = {}
 	local pluginSet = {}
+	
+	-- Add synapse plugin if it exists in package_path (special location: package_path/synapse.nvim/)
+	local packagePath = config.opts.package_path
+	local synapsePath = string.format("%s/synapse.nvim", packagePath)
+	if vim.fn.isdirectory(synapsePath) == 1 then
+		-- Use default repo from config, or fallback to common path
+		local synapseRepo = config.opts.default or "OriginCoderPulse/synapse.nvim"
+		if not pluginSet[synapseRepo] then
+			table.insert(plugins, synapseRepo)
+			pluginSet[synapseRepo] = true
+			-- Create default config for synapse
+			if not repoToConfig[synapseRepo] then
+				repoToConfig[synapseRepo] = {
+					repo = synapseRepo,
+					config = {},
+				}
+			end
+			mainPluginRepos[synapseRepo] = true
+		end
+	end
 	
 	for _, pluginConfig in ipairs(configs) do
 		if pluginConfig.repo then
@@ -281,6 +302,12 @@ function M.start(config)
 					)
 				end)
 
+				-- Determine if this is a main plugin
+				local isMainPlugin = mainPluginRepos[repo] == true
+				
+				-- Determine if this is a main plugin (including synapse)
+				local isMainPlugin = mainPluginRepos[repo] == true
+				
 				-- Task for single plugin: check first, then update if needed
 				M.checkPlugin(repo, config.opts.package_path, repoToConfig[repo], function(ok, result)
 					if not ok then
@@ -391,7 +418,10 @@ function M.checkPlugin(plugin, packagePath, pluginConfig, callback)
 
 	local pluginName = plugin:match("([^/]+)$")
 	pluginName = pluginName:gsub("%.git$", "")
-	local installDir = gitUtils.getInstallDir(pluginName, "update", packagePath)
+	
+	-- Get plugin info to determine installation path
+	local isMainPlugin, mainPluginName = jsonState.getPluginInfo(packagePath, pluginName)
+	local installDir = gitUtils.getInstallDir(pluginName, "update", packagePath, isMainPlugin, mainPluginName)
 	if vim.fn.isdirectory(installDir) ~= 1 then
 		return callback(false, "Directory is not found")
 	end
@@ -455,14 +485,21 @@ end
 --- @param isMainPlugin boolean Whether this is a main plugin
 --- @param config table Configuration table
 --- @param callback function Callback function(success, err)
-function M.updatePlugin(plugin, packagePath, pluginConfig, isMainPlugin, config, callback)
+function M.updatePlugin(plugin, packagePath, pluginConfig, isMainPluginParam, config, callback)
 	if isUpdateAborted then
 		return callback(false, "Stop")
 	end
 
 	local pluginName = plugin:match("([^/]+)$")
 	pluginName = pluginName:gsub("%.git$", "")
-	local installDir = gitUtils.getInstallDir(pluginName, "update", packagePath)
+	
+	-- Get plugin info to determine installation path
+	local isMainPlugin, mainPluginName = jsonState.getPluginInfo(packagePath, pluginName)
+	-- Use parameter if plugin info not found, otherwise use detected info
+	if isMainPlugin == false and mainPluginName == nil then
+		isMainPlugin = isMainPluginParam
+	end
+	local installDir = gitUtils.getInstallDir(pluginName, "update", packagePath, isMainPlugin, mainPluginName)
 
 	-- Get tag and branch from config (branch comes from cloneConf.branch)
 	local configTag = pluginConfig and pluginConfig.tag or nil
@@ -475,7 +512,7 @@ function M.updatePlugin(plugin, packagePath, pluginConfig, isMainPlugin, config,
 	local function reinstall(reason)
 		local installModule = require("synapse.core.install")
 		local gitMethod = (config and config.method) or "https"
-		installModule.installPlugin(pluginConfig, gitMethod, packagePath, isMainPlugin, nil, function(ok, err)
+		installModule.installPlugin(pluginConfig, gitMethod, packagePath, isMainPlugin or isMainPluginParam, nil, function(ok, err)
 			if not ok then
 				return callback(false, (reason or "Reinstall failed") .. ": " .. (err or "Unknown error"))
 			end

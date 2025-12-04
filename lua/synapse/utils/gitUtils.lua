@@ -4,8 +4,10 @@ local M = {}
 --- @param plugin string Plugin identifier (e.g., "user/repo")
 --- @param commandType string Type of command (e.g., "install", "update")
 --- @param packagePath string Base package installation path
+--- @param isMainPlugin boolean|nil Whether this is a main plugin (default: true)
+--- @param mainPluginName string|nil Main plugin name if this is a dependency
 --- @return string Full installation directory path
-function M.getInstallDir(plugin, commandType, packagePath)
+function M.getInstallDir(plugin, commandType, packagePath, isMainPlugin, mainPluginName)
 	assert(type(plugin) == "string", "Invalid plugin name: " .. tostring(plugin))
 	assert(type(commandType) == "string", "Invalid type parameter: " .. tostring(commandType))
 	assert(type(packagePath) == "string", "Invalid packagePath: " .. tostring(packagePath))
@@ -13,7 +15,28 @@ function M.getInstallDir(plugin, commandType, packagePath)
 	local pluginName = plugin:match("/([^/]+)$") or plugin:match("([^/]+)%.git$") or plugin
 	pluginName = pluginName:gsub("%.git$", "")
 
-	return string.format("%s/%s", packagePath, pluginName)
+	-- Default to main plugin if not specified
+	if isMainPlugin == nil then
+		isMainPlugin = true
+	end
+
+	-- Special handling for synapse plugin: it's directly in package_path/synapse.nvim/
+	if pluginName == "synapse" or pluginName == "synapse.nvim" then
+		return string.format("%s/synapse.nvim", packagePath)
+	end
+	
+	if isMainPlugin then
+		-- Main plugin: package_path/plugin-name/plugin-name/
+		return string.format("%s/%s/%s", packagePath, pluginName, pluginName)
+	else
+		-- Dependency: package_path/main-plugin-name/depend/dependency-name/
+		if mainPluginName then
+			return string.format("%s/%s/depend/%s", packagePath, mainPluginName, pluginName)
+		else
+			-- Fallback: if no main plugin name provided, use old structure
+			return string.format("%s/%s", packagePath, pluginName)
+		end
+	end
 end
 
 --- Get repository URL from plugin identifier
