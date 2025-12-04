@@ -17,8 +17,8 @@ function M.setup(config)
 	end, {})
 
 	vim.api.nvim_create_user_command("SynapseError", function()
-		local error_ui = require("synapse.ui.error")
-		error_ui.show_all_errors()
+		local errorUi = require("synapse.ui.errorUi")
+		errorUi.showAllErrors()
 	end, {})
 
 	-- Keymaps

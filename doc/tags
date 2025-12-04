@@ -1,0 +1,11 @@
+synapse	synapse.txt	/*synapse*
+synapse-commands	synapse.txt	/*synapse-commands*
+synapse-configuration	synapse.txt	/*synapse-configuration*
+synapse-contents	synapse.txt	/*synapse-contents*
+synapse-how-it-works	synapse.txt	/*synapse-how-it-works*
+synapse-installation	synapse.txt	/*synapse-installation*
+synapse-introduction	synapse.txt	/*synapse-introduction*
+synapse-keymaps	synapse.txt	/*synapse-keymaps*
+synapse-plugin-config	synapse.txt	/*synapse-plugin-config*
+synapse-troubleshooting	synapse.txt	/*synapse-troubleshooting*
+synapse.txt	synapse.txt	/*synapse.txt*

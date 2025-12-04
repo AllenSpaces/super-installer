@@ -27,6 +27,8 @@ Synapse.nvim is a plugin manager for Neovim that provides:
     - Auto cleanup of unused plugins
     - Post-install/update command execution
     - Automatic plugin setup from configuration files
+    - Import support for loading configurations from non-standard files
+    - Support for arbitrary depth nested import structures
 
 ==============================================================================
 INSTALLATION                                                  *synapse-installation*
@@ -83,6 +85,13 @@ Basic Setup~
                 -- Default: vim.fn.stdpath("config")
                 config_path = vim.fn.stdpath("config"),
             },
+            
+            -- Import field: Load configurations from non-standard files
+            imports = {
+                lua = {
+                    test = { "config" },  -- Loads config_path/lua/test/config.lua
+                },
+            },
         })
 <
 
@@ -105,6 +114,34 @@ opts.ui.style (string)~
     Default: "float"
     Options: "float", "split"
 
+imports (table)~
+    Import configurations from non-standard files. Supports arbitrary depth 
+    nested structures.
+    Format: Nested table structure where keys represent directory paths and 
+    values represent filenames.
+    Example:
+>
+        imports = {
+            lua = {
+                "config1",  -- Loads config_path/lua/config1.lua
+                test = {
+                    "config2",  -- Loads config_path/lua/test/config2.lua
+                    test1 = { "config3" },  -- Loads config_path/lua/test/test1/config3.lua
+                },
+            },
+        }
+<
+    The above configuration will load:
+    1. config_path/lua/config1.lua (from array element at lua level)
+    2. config_path/lua/test/config2.lua (from array element at test level)
+    3. config_path/lua/test/test1/config3.lua (from nested structure)
+    
+    Rules:
+    - Array elements (numeric keys with string values) are appended directly 
+      to the current path
+    - String keys create subdirectories and continue recursion
+    - Mixed arrays and string keys in the same table are both processed
+
 keys.download (string)~
     Keymap to open plugin installation UI.
     Default: "<leader>si"
@@ -126,7 +163,8 @@ Create .config.lua files in your config_path directory (or subdirectories).
 These files support both plugin installation configuration and automatic setup.
 
 IMPORTANT: Only files ending with .config.lua will be recognized and 
-automatically processed.
+automatically processed. For non-standard files, use the imports field in your 
+main configuration.
 
 Configuration File Structure~
 
@@ -145,9 +183,9 @@ tag (string)~
     Example: "v1.2.3"
     Takes precedence over branch.
 
-clone_conf.branch (string)~
+branch (string)~
     Clone a specific branch.
-    Example: { branch = "main" }
+    Example: "main"
     Only used if tag is not specified.
 
 execute (string|table)~
@@ -203,6 +241,7 @@ config (function)~
 initialization (function)~
     Function executed before plugin.setup().
     Receives a package wrapper that allows accessing plugin submodules.
+    Supports arbitrary depth nested structures for accessing submodules.
     Use this to configure plugin submodules before setup.
     Example:
 >
@@ -210,6 +249,9 @@ initialization (function)~
             -- Access submodules: package({ "submodule" }) or package.submodule
             local install = package({ "install" })
             install.prefer_git = true
+            
+            -- Support for nested structures
+            local nested = package({ test = { test1 = { "ok" } } })
         end
 <
 
@@ -308,6 +350,29 @@ Plugin with Build Commands~
         }
 <
 
+Using Import Field~
+>
+        -- ~/.config/nvim/init.lua
+        require("synapse").setup({
+            opts = {
+                config_path = vim.fn.stdpath("config"),
+            },
+            imports = {
+                lua = {
+                    test = { "config" },  -- Loads ~/.config/nvim/lua/test/config.lua
+                },
+            },
+        })
+        
+        -- ~/.config/nvim/lua/test/config.lua (not a .config.lua file)
+        return {
+            repo = "username/plugin-name",
+            opts = {
+                option1 = "value1",
+            },
+        }
+<
+
 ==============================================================================
 COMMANDS                                                      *synapse-commands*
 
@@ -348,10 +413,11 @@ You can customize these keymaps in your configuration:
 ==============================================================================
 HOW IT WORKS                                              *synapse-how-it-works*
 
-1. Installation: Create .config.lua files in your config_path directory
+1. Installation: Create .config.lua files in your config_path directory, or 
+   use the imports field to load configurations from non-standard files
 
 2. Auto-Setup: On Neovim startup, Synapse scans for .config.lua files and 
-   automatically:
+   import files, then automatically:
    - Loads plugin configurations
    - Calls plugin.setup(opts) for plugins with opts field
    - Executes config function for plugins with config field
@@ -368,6 +434,7 @@ Plugins Not Recognized~
 
     - Ensure configuration files end with .config.lua and are in config_path 
       directory (supports subdirectories)
+    - For non-standard files, use the imports field in your main configuration
     - Check that files return a table with a repo field
     - Verify repo field is not empty
 
@@ -387,4 +454,3 @@ Keymaps Not Working~
 
 ==============================================================================
 vim:tw=78:ts=8:ft=help:norl:
-

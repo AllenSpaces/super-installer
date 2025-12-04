@@ -10,53 +10,53 @@ local colors = {
 local M = {}
 
 -- Cache for auto-generated highlight groups from hex colors
-local color_hl_cache = {}
+local colorHlCache = {}
 
 --- Check if a string is a hex color
---- @param str string
---- @return boolean
-local function is_hex_color(str)
+--- @param str string String to check
+--- @return boolean True if string is a hex color
+local function isHexColor(str)
 	return type(str) == "string" and str:match("^#%x%x%x%x%x%x$") ~= nil
 end
 
 --- Get or create highlight group for hex color
---- @param color string hex color like "#bbc0ed"
---- @param prefix string prefix for highlight group name
---- @return string highlight group name
-local function get_color_hl(color, prefix)
-	if not color_hl_cache[color] then
-		local hl_name = "Synapse" .. prefix .. "Color" .. #color_hl_cache
-		api.nvim_set_hl(0, hl_name, { fg = color })
-		color_hl_cache[color] = hl_name
+--- @param color string Hex color like "#bbc0ed"
+--- @param prefix string Prefix for highlight group name
+--- @return string Highlight group name
+local function getColorHl(color, prefix)
+	if not colorHlCache[color] then
+		local hlName = "Synapse" .. prefix .. "Color" .. #colorHlCache
+		api.nvim_set_hl(0, hlName, { fg = color })
+		colorHlCache[color] = hlName
 	end
-	return color_hl_cache[color]
+	return colorHlCache[color]
 end
 
 --- Resolve highlight group name or color
---- @param hl_value string|nil highlight group name or hex color
---- @param default_path string config path for default value
---- @param default_color string|nil default color if hl is nil
---- @param prefix string prefix for auto-generated highlight group
---- @return string highlight group name
-local function resolve_hl(hl_value, default_path, default_color, prefix)
-	if not hl_value then
-		hl_value = get_default_hl(default_path) or default_color
+--- @param hlValue string|nil Highlight group name or hex color
+--- @param defaultPath string Config path for default value
+--- @param defaultColor string|nil Default color if hl is nil
+--- @param prefix string Prefix for auto-generated highlight group
+--- @return string Highlight group name
+local function resolveHl(hlValue, defaultPath, defaultColor, prefix)
+	if not hlValue then
+		hlValue = getDefaultHl(defaultPath) or defaultColor
 	end
 	
-	if is_hex_color(hl_value) then
-		return get_color_hl(hl_value, prefix)
+	if isHexColor(hlValue) then
+		return getColorHl(hlValue, prefix)
 	end
 	
-	return hl_value
+	return hlValue
 end
 
 --- Get default highlight name from config
---- @param path string config path like "header.hl" or "icons.success.hl"
---- @return string|nil
-local function get_default_hl(path)
-	local default_ui = config.default.opts.ui
+--- @param path string Config path like "header.hl" or "icons.success.hl"
+--- @return string|nil Highlight group name or nil
+local function getDefaultHl(path)
+	local defaultUi = config.default.opts.ui
 	local parts = vim.split(path, ".", { plain = true })
-	local value = default_ui
+	local value = defaultUi
 	for _, part in ipairs(parts) do
 		if value and type(value) == "table" and value[part] then
 			value = value[part]
@@ -68,100 +68,104 @@ local function get_default_hl(path)
 end
 
 --- Ensure all highlight groups are defined
---- @param ui table|nil
---- @param state table
-function M.ensure_highlights(ui, state)
+--- @param ui table|nil UI configuration
+--- @param state table State table
+function M.ensureHighlights(ui, state)
 	-- Get default config if ui is nil
-	local default_ui = config.default.opts.ui
+	local defaultUi = config.default.opts.ui
 	
 	-- Set header highlight from config (supports hex color)
-	local header_hl_value = (ui and ui.header and ui.header.hl) or get_default_hl("header.hl")
-	local header_hl = resolve_hl(header_hl_value, "header.hl", colors.header, "Header")
-	if is_hex_color(header_hl_value) then
-		api.nvim_set_hl(0, header_hl, { fg = header_hl_value, bold = true })
+	local headerHlValue = (ui and ui.header and ui.header.hl) or getDefaultHl("header.hl")
+	local headerHl = resolveHl(headerHlValue, "header.hl", colors.header, "Header")
+	if isHexColor(headerHlValue) then
+		api.nvim_set_hl(0, headerHl, { fg = headerHlValue, bold = true })
 	else
-		api.nvim_set_hl(0, header_hl, { fg = colors.header, bold = true })
+		api.nvim_set_hl(0, headerHl, { fg = colors.header, bold = true })
 	end
-	state.header_hl = header_hl
+	state.headerHl = headerHl
 
 	-- Set plugin highlight from config (supports hex color)
-	local plugin_hl_value = (ui and ui.plug and ui.plug.hl) or get_default_hl("plug.hl")
-	local plugin_hl = resolve_hl(plugin_hl_value, "plug.hl", colors.plugin, "Plugin")
-	if is_hex_color(plugin_hl_value) then
-		api.nvim_set_hl(0, plugin_hl, { fg = plugin_hl_value })
+	local pluginHlValue = (ui and ui.plug and ui.plug.hl) or getDefaultHl("plug.hl")
+	local pluginHl = resolveHl(pluginHlValue, "plug.hl", colors.plugin, "Plugin")
+	if isHexColor(pluginHlValue) then
+		api.nvim_set_hl(0, pluginHl, { fg = pluginHlValue })
 	else
-		api.nvim_set_hl(0, plugin_hl, { fg = colors.plugin })
+		api.nvim_set_hl(0, pluginHl, { fg = colors.plugin })
 	end
-	state.plugin_hl = plugin_hl
+	state.pluginHl = pluginHl
 
 	-- Set progress highlight groups from config (supports hex color)
-	local progress_cfg = (ui and ui.icons and ui.icons.progress) or default_ui.icons.progress
-	local progress_hl_cfg = progress_cfg.hl or {}
-	local default_hl_value = progress_hl_cfg.default or get_default_hl("icons.progress.hl.default")
-	local progress_hl_value = progress_hl_cfg.progress or get_default_hl("icons.progress.hl.progress")
-	local default_color = progress_hl_cfg.default_color or "#5c6370"
-	local progress_color = progress_hl_cfg.progress_color or colors.progress
+	local progressCfg = (ui and ui.icons and ui.icons.progress) or defaultUi.icons.progress
+	local progressHlCfg = progressCfg.hl or {}
+	local defaultHlValue = progressHlCfg.default or getDefaultHl("icons.progress.hl.default")
+	local progressHlValue = progressHlCfg.progress or getDefaultHl("icons.progress.hl.progress")
+	local defaultColor = progressHlCfg.defaultColor or "#5c6370"
+	local progressColor = progressHlCfg.progressColor or colors.progress
 	
-	local default_hl = resolve_hl(default_hl_value, "icons.progress.hl.default", default_color, "ProgressDefault")
-	local progress_hl = resolve_hl(progress_hl_value, "icons.progress.hl.progress", progress_color, "Progress")
+	local defaultHl = resolveHl(defaultHlValue, "icons.progress.hl.default", defaultColor, "ProgressDefault")
+	local progressHl = resolveHl(progressHlValue, "icons.progress.hl.progress", progressColor, "Progress")
 	
-	if is_hex_color(default_hl_value) then
-		api.nvim_set_hl(0, default_hl, { fg = default_hl_value })
+	if isHexColor(defaultHlValue) then
+		api.nvim_set_hl(0, defaultHl, { fg = defaultHlValue })
 	else
-		api.nvim_set_hl(0, default_hl, { fg = default_color })
+		api.nvim_set_hl(0, defaultHl, { fg = defaultColor })
 	end
 	
-	if is_hex_color(progress_hl_value) then
-		api.nvim_set_hl(0, progress_hl, { fg = progress_hl_value })
+	if isHexColor(progressHlValue) then
+		api.nvim_set_hl(0, progressHl, { fg = progressHlValue })
 	else
-		api.nvim_set_hl(0, progress_hl, { fg = progress_color })
+		api.nvim_set_hl(0, progressHl, { fg = progressColor })
 	end
 	
-	state.progress_hl = {
-		default = default_hl,
-		progress = progress_hl,
+	state.progressHl = {
+		default = defaultHl,
+		progress = progressHl,
 	}
 
 	-- Set success and failure highlight groups from config (supports hex color)
-	local success_cfg = (ui and ui.icons and ui.icons.success) or default_ui.icons.success
-	local success_hl_value = success_cfg.hl or get_default_hl("icons.success.hl")
-	local success_hl = resolve_hl(success_hl_value, "icons.success.hl", "#bbc0ed", "Success")
-	if is_hex_color(success_hl_value) then
-		api.nvim_set_hl(0, success_hl, { fg = success_hl_value })
+	local successCfg = (ui and ui.icons and ui.icons.success) or defaultUi.icons.success
+	local successHlValue = successCfg.hl or getDefaultHl("icons.success.hl")
+	local successHl = resolveHl(successHlValue, "icons.success.hl", "#bbc0ed", "Success")
+	if isHexColor(successHlValue) then
+		api.nvim_set_hl(0, successHl, { fg = successHlValue })
 	else
-		api.nvim_set_hl(0, success_hl, { fg = "#bbc0ed" })
+		api.nvim_set_hl(0, successHl, { fg = "#bbc0ed" })
 	end
-	state.success_hl = success_hl
+	state.successHl = successHl
 
-	local faild_cfg = (ui and ui.icons and ui.icons.faild) or default_ui.icons.faild
-	local faild_hl_value = faild_cfg.hl or get_default_hl("icons.faild.hl")
-	local faild_hl = resolve_hl(faild_hl_value, "icons.faild.hl", "#edbbbb", "Faild")
-	if is_hex_color(faild_hl_value) then
-		api.nvim_set_hl(0, faild_hl, { fg = faild_hl_value })
+	local faildCfg = (ui and ui.icons and ui.icons.faild) or defaultUi.icons.faild
+	local faildHlValue = faildCfg.hl or getDefaultHl("icons.faild.hl")
+	local faildHl = resolveHl(faildHlValue, "icons.faild.hl", "#edbbbb", "Faild")
+	if isHexColor(faildHlValue) then
+		api.nvim_set_hl(0, faildHl, { fg = faildHlValue })
 	else
-		api.nvim_set_hl(0, faild_hl, { fg = "#edbbbb" })
+		api.nvim_set_hl(0, faildHl, { fg = "#edbbbb" })
 	end
-	state.faild_hl = faild_hl
+	state.faildHl = faildHl
 
 	-- Set icon highlight groups from config (download, upgrade, remove, check, package) (supports hex color)
-	local icon_types = { "download", "upgrade", "remove", "check", "package" }
-	for _, icon_type in ipairs(icon_types) do
-		local icon_cfg = (ui and ui.icons and ui.icons[icon_type]) or default_ui.icons[icon_type]
-		if icon_cfg and icon_cfg.hl then
-			local icon_hl = resolve_hl(icon_cfg.hl, "icons." .. icon_type .. ".hl", colors.progress, icon_type:sub(1, 1):upper() .. icon_type:sub(2))
-			if is_hex_color(icon_cfg.hl) then
-				api.nvim_set_hl(0, icon_hl, { fg = icon_cfg.hl })
+	local iconTypes = { "download", "upgrade", "remove", "check", "package" }
+	for _, iconType in ipairs(iconTypes) do
+		local iconCfg = (ui and ui.icons and ui.icons[iconType]) or defaultUi.icons[iconType]
+		if iconCfg and iconCfg.hl then
+			local iconHl = resolveHl(iconCfg.hl, "icons." .. iconType .. ".hl", colors.progress, iconType:sub(1, 1):upper() .. iconType:sub(2))
+			if isHexColor(iconCfg.hl) then
+				api.nvim_set_hl(0, iconHl, { fg = iconCfg.hl })
 			else
-				api.nvim_set_hl(0, icon_hl, { fg = colors.progress })
+				api.nvim_set_hl(0, iconHl, { fg = colors.progress })
 			end
 		end
 	end
 
 	-- Set default icon highlight (use download icon hl as fallback) (supports hex color)
-	local download_cfg = (ui and ui.icons and ui.icons.download) or default_ui.icons.download
-	local download_hl_value = download_cfg and download_cfg.hl or get_default_hl("icons.download.hl")
-	state.icon_hl = resolve_hl(download_hl_value, "icons.download.hl", colors.progress, "Icon")
+	local downloadCfg = (ui and ui.icons and ui.icons.download) or defaultUi.icons.download
+	local downloadHlValue = downloadCfg and downloadCfg.hl or getDefaultHl("icons.download.hl")
+	state.iconHl = resolveHl(downloadHlValue, "icons.download.hl", colors.progress, "Icon")
+end
+
+-- Backward compatibility alias
+function M.ensure_highlights(ui, state)
+	return M.ensureHighlights(ui, state)
 end
 
 return M
-

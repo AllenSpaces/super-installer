@@ -1,232 +1,234 @@
 local ui = require("synapse.ui")
-local error_ui = require("synapse.ui.error")
-local git_utils = require("synapse.utils.git")
-local config_utils = require("synapse.utils.config")
-local string_utils = require("synapse.utils.string")
-local json_state = require("synapse.utils.json_state")
+local errorUi = require("synapse.ui.errorUi")
+local gitUtils = require("synapse.utils.gitUtils")
+local configLoader = require("synapse.utils.configLoader")
+local stringUtils = require("synapse.utils.stringUtils")
+local jsonState = require("synapse.utils.jsonState")
 
 local M = {}
 
-local installation_active = true
+local installationActive = true
 local jobs = {}
 
 --- Execute commands sequentially in plugin directory
 --- @param commands table Array of command strings
---- @param plugin_dir string Plugin installation directory
+--- @param pluginDir string Plugin installation directory
 --- @param callback function Callback function(success, err)
---- @return number|nil job_id
-local function execute_commands(commands, plugin_dir, callback)
+--- @return number|nil jobId Job ID for tracking
+local function executeCommands(commands, pluginDir, callback)
 	if not commands or #commands == 0 then
 		return callback(true, nil)
 	end
 
-	local job_ids = {}
+	local jobIds = {}
 
-	local function run_next(index)
+	local function runNext(index)
 		if index > #commands then
 			return callback(true, nil)
 		end
 
 		local cmd = commands[index]
-		local full_cmd = string.format("cd %s && %s", vim.fn.shellescape(plugin_dir), cmd)
+		local fullCmd = string.format("cd %s && %s", vim.fn.shellescape(pluginDir), cmd)
 		
-		local job_id = git_utils.execute_command(full_cmd, function(success, err)
+		local jobId = gitUtils.executeCommand(fullCmd, function(success, err)
 			if success then
-				run_next(index + 1)
+				runNext(index + 1)
 			else
 				callback(false, string.format("Execute command failed: %s - %s", cmd, err))
 			end
 		end)
-		if job_id then
-			table.insert(job_ids, job_id)
+		if jobId then
+			table.insert(jobIds, jobId)
 		end
 	end
 
-	run_next(1)
-	return job_ids[1] -- Return first job_id for tracking
+	runNext(1)
+	return jobIds[1] -- Return first jobId for tracking
 end
 
 --- Ensure synapse.json exists, create empty file if it doesn't
---- @param config table
-local function ensure_json_exists(config)
-	json_state.ensure_json_exists(config.opts.package_path)
+--- @param config table Configuration table
+local function ensureJsonExists(config)
+	jsonState.ensureJsonExists(config.opts.package_path)
 end
 
+--- Start plugin installation process
+--- @param config table Configuration table
 function M.start(config)
-	installation_active = true
+	installationActive = true
 	jobs = {}
 	-- Clear error cache at start
-	error_ui.clear_cache()
+	errorUi.clearCache()
 
 	-- Check and create synapse.json if it doesn't exist
-	ensure_json_exists(config)
+	ensureJsonExists(config)
 
-	-- 从 config_path 读取配置文件
-	local configs = config_utils.load_config_files(config.opts.config_path)
+	-- Load configuration files from config_path (including import files)
+	local configs = configLoader.loadConfigFiles(config.opts.config_path, config.imports)
 	
-	-- 添加默认插件
-	local default_config = {
+	-- Add default plugin
+	local defaultConfig = {
 		repo = config.opts.default,
 		-- Don't set branch by default, let git use default branch
 		config = {},
 	}
-	table.insert(configs, 1, default_config)
+	table.insert(configs, 1, defaultConfig)
 
-	local install_dir = config.opts.package_path
+	local installDir = config.opts.package_path
 
-	local existing_plugins = {}
-	for _, path in ipairs(vim.split(vim.fn.glob(install_dir .. "/*"), "\n")) do
-		existing_plugins[vim.fn.fnamemodify(path, ":t")] = true
+	local existingPlugins = {}
+	for _, path in ipairs(vim.split(vim.fn.glob(installDir .. "/*"), "\n")) do
+		existingPlugins[vim.fn.fnamemodify(path, ":t")] = true
 	end
 
-	-- 收集所有需要安装的插件（包括依赖项）
-	-- 首先建立主插件映射表（用于查找依赖项是否也是主插件）
-	local main_plugin_map = {}
-	for _, plugin_config in ipairs(configs) do
-		if plugin_config.repo then
-			main_plugin_map[plugin_config.repo] = plugin_config
+	-- Collect all plugins to install (including dependencies)
+	-- First build main plugin map (for checking if dependency is also a main plugin)
+	local mainPluginMap = {}
+	for _, pluginConfig in ipairs(configs) do
+		if pluginConfig.repo then
+			mainPluginMap[pluginConfig.repo] = pluginConfig
 		end
 	end
 	
-	-- 收集所有插件（主插件 + 依赖项），使用 set 去重
-	local all_plugins = {}
-	local processed_repos = {} -- 用于去重的集合
+	-- Collect all plugins (main plugins + dependencies), using set for deduplication
+	local allPlugins = {}
+	local processedRepos = {} -- Set for deduplication
 	
-	-- 首先添加所有主插件
-	for _, plugin_config in ipairs(configs) do
-		if plugin_config.repo then
-			local repo = plugin_config.repo
-			if not processed_repos[repo] then
-				all_plugins[repo] = plugin_config
-				processed_repos[repo] = true
+	-- First add all main plugins
+	for _, pluginConfig in ipairs(configs) do
+		if pluginConfig.repo then
+			local repo = pluginConfig.repo
+			if not processedRepos[repo] then
+				allPlugins[repo] = pluginConfig
+				processedRepos[repo] = true
 			end
 		end
 	end
 	
-	-- 递归收集所有依赖项（去重）
-	local function collect_dependencies(plugin_config)
-		if not plugin_config.depend or type(plugin_config.depend) ~= "table" then
+	-- Recursively collect all dependencies (deduplicated)
+	local function collectDependencies(pluginConfig)
+		if not pluginConfig.depend or type(pluginConfig.depend) ~= "table" then
 			return
 		end
 		
-		for _, dep_item in ipairs(plugin_config.depend) do
-			local dep_repo, dep_opt = config_utils.parse_dependency(dep_item)
-			if dep_repo and not processed_repos[dep_repo] then
-				-- 如果依赖项本身也是主插件，使用主插件的配置
-				if main_plugin_map[dep_repo] then
-					all_plugins[dep_repo] = main_plugin_map[dep_repo]
-					-- 递归处理依赖项的依赖项
-					collect_dependencies(main_plugin_map[dep_repo])
+		for _, depItem in ipairs(pluginConfig.depend) do
+			local depRepo, depOpt = configLoader.parseDependency(depItem)
+			if depRepo and not processedRepos[depRepo] then
+				-- If dependency is also a main plugin, use main plugin's config
+				if mainPluginMap[depRepo] then
+					allPlugins[depRepo] = mainPluginMap[depRepo]
+					-- Recursively process dependencies of dependencies
+					collectDependencies(mainPluginMap[depRepo])
 				else
-					-- 如果只是依赖项，使用默认配置（不设置 branch，使用 git 默认分支）
-					-- 如果有 opt 配置，保存它
-					local dep_config = {
-						repo = dep_repo,
+					-- If it's just a dependency, use default config (don't set branch, use git default)
+					-- If there's opt config, save it
+					local depConfig = {
+						repo = depRepo,
 						-- Don't set branch by default, let git use default branch
 						config = {},
 						depend = {},
 					}
-					if dep_opt then
-						dep_config.opt = dep_opt
+					if depOpt then
+						depConfig.opt = depOpt
 					end
-					all_plugins[dep_repo] = dep_config
+					allPlugins[depRepo] = depConfig
 				end
-				processed_repos[dep_repo] = true
+				processedRepos[depRepo] = true
 			end
 		end
 	end
 	
-	-- 为所有主插件收集依赖项
-	for _, plugin_config in ipairs(configs) do
-		if plugin_config.repo then
-			collect_dependencies(plugin_config)
+	-- Collect dependencies for all main plugins
+	for _, pluginConfig in ipairs(configs) do
+		if pluginConfig.repo then
+			collectDependencies(pluginConfig)
 		end
 	end
 	
-	-- 建立主插件集合（通过 repo 路径）
-	local main_plugin_repos = {}
-	for _, plugin_config in ipairs(configs) do
-		if plugin_config.repo then
-			main_plugin_repos[plugin_config.repo] = true
+	-- Build main plugin set (by repo path)
+	local mainPluginRepos = {}
+	for _, pluginConfig in ipairs(configs) do
+		if pluginConfig.repo then
+			mainPluginRepos[pluginConfig.repo] = true
 		end
 	end
 	
-			-- 建立依赖项到主插件的映射（用于安装依赖项时更新主插件的 json）
-	local dep_to_main_plugins = {} -- dep_repo -> {main_plugin_repo1, main_plugin_repo2, ...}
-	for _, plugin_config in ipairs(configs) do
-		if plugin_config.repo and plugin_config.depend and type(plugin_config.depend) == "table" then
-			for _, dep_item in ipairs(plugin_config.depend) do
-				local dep_repo = config_utils.parse_dependency(dep_item)
-				if dep_repo then
-					if not dep_to_main_plugins[dep_repo] then
-						dep_to_main_plugins[dep_repo] = {}
+	-- Build dependency to main plugins mapping (for updating main plugin's json when installing dependency)
+	local depToMainPlugins = {} -- depRepo -> {mainPluginRepo1, mainPluginRepo2, ...}
+	for _, pluginConfig in ipairs(configs) do
+		if pluginConfig.repo and pluginConfig.depend and type(pluginConfig.depend) == "table" then
+			for _, depItem in ipairs(pluginConfig.depend) do
+				local depRepo = configLoader.parseDependency(depItem)
+				if depRepo then
+					if not depToMainPlugins[depRepo] then
+						depToMainPlugins[depRepo] = {}
 					end
-					-- 只有当依赖项不是主插件时，才记录它所属的主插件
-					if not main_plugin_repos[dep_repo] then
-						table.insert(dep_to_main_plugins[dep_repo], plugin_config.repo)
+					-- Only record which main plugin it belongs to if dependency is not a main plugin
+					if not mainPluginRepos[depRepo] then
+						table.insert(depToMainPlugins[depRepo], pluginConfig.repo)
 					end
 				end
 			end
 		end
 	end
 	
-	-- 转换为列表并过滤已安装的插件，确保依赖项在主插件之前安装
-	local pending_install = {}
+	-- Convert to list and filter already installed plugins, ensure dependencies are installed before main plugins
+	local pendingInstall = {}
 	local dependencies = {}
-	local main_plugins = {}
+	local mainPlugins = {}
 	
-	for repo, plugin_config in pairs(all_plugins) do
-		local plugin_name = repo:match("([^/]+)$")
-		plugin_name = plugin_name:gsub("%.git$", "")
-		if not existing_plugins[plugin_name] and plugin_name ~= "synapse" and plugin_name ~= "synapse.nvim" then
-			-- 如果是主插件，添加到主插件列表
-			if main_plugin_repos[repo] then
-				table.insert(main_plugins, plugin_config)
+	for repo, pluginConfig in pairs(allPlugins) do
+		local pluginName = repo:match("([^/]+)$")
+		pluginName = pluginName:gsub("%.git$", "")
+		if not existingPlugins[pluginName] and pluginName ~= "synapse" and pluginName ~= "synapse.nvim" then
+			-- If it's a main plugin, add to main plugins list
+			if mainPluginRepos[repo] then
+				table.insert(mainPlugins, pluginConfig)
 			else
-				-- 如果是依赖项，添加到依赖项列表
-				table.insert(dependencies, plugin_config)
+				-- If it's a dependency, add to dependencies list
+				table.insert(dependencies, pluginConfig)
 			end
 		end
 	end
 	
-	-- 先添加依赖项，再添加主插件，确保依赖项先安装
+	-- Add dependencies first, then main plugins, to ensure dependencies are installed first
 	for _, dep in ipairs(dependencies) do
-		table.insert(pending_install, dep)
+		table.insert(pendingInstall, dep)
 	end
-	for _, main in ipairs(main_plugins) do
-		table.insert(pending_install, main)
+	for _, main in ipairs(mainPlugins) do
+		table.insert(pendingInstall, main)
 	end
 
-	if #pending_install == 0 then
+	if #pendingInstall == 0 then
 		ui.log_message("All plugins are already installed.")
 		return
 	end
 
-	local function run_install_queue(queue)
+	local function runInstallQueue(queue)
 		if not queue or #queue == 0 then
 			return
 		end
 
-		installation_active = true
+		installationActive = true
 		jobs = {}
 
-		local plugin_names = {}
+		local pluginNames = {}
 		for _, cfg in ipairs(queue) do
-			-- UI 中直接显示完整 repo 名称（不再根据斜杠分割）
-			table.insert(plugin_names, cfg.repo)
+			-- UI directly displays full repo name (no longer split by slash)
+			table.insert(pluginNames, cfg.repo)
 		end
 
-		local progress_win = ui.open({
+		local progressWin = ui.open({
 			header = config.opts.ui.header,
 			icon = config.opts.ui.icons.download,
-			plugins = plugin_names,
+			plugins = pluginNames,
 			ui = config.opts.ui,
 		})
 
 		vim.api.nvim_create_autocmd("WinClosed", {
-			buffer = progress_win.buf,
+			buffer = progressWin.buf,
 			callback = function()
-				installation_active = false
+				installationActive = false
 				for _, job in ipairs(jobs) do
 					if job then
 						vim.fn.jobstop(job)
@@ -237,40 +239,40 @@ function M.start(config)
 
 		local total = #queue
 		local errors = {}
-		local failed_list = {}
-		local installed_count = 0
+		local failedList = {}
+		local installedCount = 0
 		local completed = 0
 
-		-- 初始化进度显示为 0
+		-- Initialize progress display to 0
 		vim.schedule(function()
-			ui.update_progress(progress_win, nil, 0, total, config.opts.ui)
+			ui.update_progress(progressWin, nil, 0, total, config.opts.ui)
 		end)
 
 		local function finalize()
-			if not installation_active then
+			if not installationActive then
 				return
 			end
 
 			if #errors > 0 then
 				-- Show failed plugins and allow retry
-				ui.show_report(errors, installed_count, total, {
+				ui.show_report(errors, installedCount, total, {
 					ui = config.opts.ui,
-					failed_plugins = failed_list,
+					failed_plugins = failedList,
 					on_retry = function()
 						-- Retry failed plugins
-						local retry_queue = {}
+						local retryQueue = {}
 						for _, err in ipairs(errors) do
 							for _, cfg in ipairs(queue) do
-								-- 这里 err.plugin 现在是完整 repo 名称，直接比较 repo 字段
+								-- err.plugin is now full repo name, directly compare repo field
 								if cfg.repo == err.plugin then
-									table.insert(retry_queue, cfg)
+									table.insert(retryQueue, cfg)
 									break
 								end
 							end
 						end
-						if #retry_queue > 0 then
-							-- Retry with the same main_plugin_repos context
-							run_install_queue(retry_queue)
+						if #retryQueue > 0 then
+							-- Retry with the same mainPluginRepos context
+							runInstallQueue(retryQueue)
 						end
 					end,
 				})
@@ -279,197 +281,203 @@ function M.start(config)
 			end
 		end
 
-		-- 并发执行器：最多同时执行10个任务
+		-- Concurrent executor: execute up to 10 tasks simultaneously
 		local MAX_CONCURRENT = 10
-		local pending_queue = {}
-		local running_count = 0
+		local pendingQueue = {}
+		local runningCount = 0
 
-		-- 初始化待执行队列
+		-- Initialize pending queue
 		for i = 1, #queue do
-			table.insert(pending_queue, i)
+			table.insert(pendingQueue, i)
 		end
 
-		local function start_next_task()
-			if not installation_active then
+		local function startNextTask()
+			if not installationActive then
 				return
 			end
 
-			-- 如果队列为空且没有正在运行的任务，完成
-			if #pending_queue == 0 and running_count == 0 then
+			-- If queue is empty and no tasks are running, finish
+			if #pendingQueue == 0 and runningCount == 0 then
 				finalize()
 				return
 			end
 
-			-- 如果正在运行的任务达到上限或队列为空，等待
-			if running_count >= MAX_CONCURRENT or #pending_queue == 0 then
+			-- If running tasks reach limit or queue is empty, wait
+			if runningCount >= MAX_CONCURRENT or #pendingQueue == 0 then
 				return
 			end
 
-			-- 从队列中取出一个任务
-			local queue_index = table.remove(pending_queue, 1)
-			local plugin_config = queue[queue_index]
-			local display_name = plugin_config.repo
-			local is_main_plugin = main_plugin_repos[plugin_config.repo] == true
+			-- Take a task from queue
+			local queueIndex = table.remove(pendingQueue, 1)
+			local pluginConfig = queue[queueIndex]
+			local displayName = pluginConfig.repo
+			local isMainPlugin = mainPluginRepos[pluginConfig.repo] == true
 
-			running_count = running_count + 1
+			runningCount = runningCount + 1
 			vim.schedule(function()
-				ui.update_progress(progress_win, { plugin = display_name, status = "active" }, completed, total, config.opts.ui)
+				ui.update_progress(progressWin, { plugin = displayName, status = "active" }, completed, total, config.opts.ui)
 			end)
 
-			-- 获取依赖项所属的主插件列表
-			local parent_main_plugins = nil
-			if not is_main_plugin then
-				parent_main_plugins = dep_to_main_plugins[plugin_config.repo] or {}
+			-- Get list of main plugins that this dependency belongs to
+			local parentMainPlugins = nil
+			if not isMainPlugin then
+				parentMainPlugins = depToMainPlugins[pluginConfig.repo] or {}
 			end
 			
-			local job_id = M.install_plugin(plugin_config, config.method, config.opts.package_path, is_main_plugin, parent_main_plugins, function(success, err)
-				running_count = running_count - 1
+			local jobId = M.installPlugin(pluginConfig, config.method, config.opts.package_path, isMainPlugin, parentMainPlugins, function(success, err)
+				runningCount = runningCount - 1
 				completed = completed + 1
 
 				if success then
-					installed_count = installed_count + 1
+					installedCount = installedCount + 1
 				else
-					-- 错误和 UI 中都使用完整 repo 名称
-					table.insert(errors, { plugin = display_name, error = err })
-					table.insert(failed_list, display_name)
-					error_ui.save_error(display_name, err or "Installation failed")
+					-- Use full repo name in both error and UI
+					table.insert(errors, { plugin = displayName, error = err })
+					table.insert(failedList, displayName)
+					errorUi.saveError(displayName, err or "Installation failed")
 				end
 
-				-- 立即更新进度条并启动下一个任务
+				-- Immediately update progress bar and start next task
 				vim.schedule(function()
 					ui.update_progress(
-						progress_win,
-						{ plugin = display_name, status = success and "done" or "failed" },
+						progressWin,
+						{ plugin = displayName, status = success and "done" or "failed" },
 						completed,
 						total,
 						config.opts.ui
 					)
-					-- 尝试启动下一个任务（在 schedule 中确保立即执行）
-					start_next_task()
+					-- Try to start next task (in schedule to ensure immediate execution)
+					startNextTask()
 				end)
 			end)
-			if job_id then
-				table.insert(jobs, job_id)
+			if jobId then
+				table.insert(jobs, jobId)
 			end
 		end
 
-		-- 启动初始任务（最多5个）
-		for i = 1, math.min(MAX_CONCURRENT, #pending_queue) do
-			start_next_task()
+		-- Start initial tasks (up to MAX_CONCURRENT)
+		for i = 1, math.min(MAX_CONCURRENT, #pendingQueue) do
+			startNextTask()
 		end
 	end
 
-	run_install_queue(pending_install)
+	runInstallQueue(pendingInstall)
 end
 
--- JSON metadata helpers are centralized in synapse.utils.json_state
-
-function M.install_plugin(plugin_config, git_config, package_path, is_main_plugin, parent_main_plugins, callback)
-	if not installation_active then
+--- Install a single plugin
+--- @param pluginConfig table Plugin configuration
+--- @param gitConfig string Git method ("ssh" or "https")
+--- @param packagePath string Base package installation path
+--- @param isMainPlugin boolean Whether this is a main plugin
+--- @param parentMainPlugins table|nil List of main plugin repos that depend on this plugin
+--- @param callback function Callback function(success, err)
+--- @return number|nil jobId Job ID for tracking
+function M.installPlugin(pluginConfig, gitConfig, packagePath, isMainPlugin, parentMainPlugins, callback)
+	if not installationActive then
 		return
 	end
 
-	local repo = plugin_config.repo
-	local plugin_name = string_utils.get_plugin_name(repo)
-	local target_dir = git_utils.get_install_dir(plugin_name, "start", package_path)
+	local repo = pluginConfig.repo
+	local pluginName = stringUtils.getPluginName(repo)
+	local targetDir = gitUtils.getInstallDir(pluginName, "start", packagePath)
 	
 	-- Determine branch and tag: if plugin already exists, try to get from synapse.json first
 	-- But prioritize config tag if it exists
-	local branch = plugin_config.branch  -- Don't default to "main", use nil if not specified
-	local tag = plugin_config.tag  -- Always prioritize config tag
-	if vim.fn.isdirectory(target_dir) == 1 then
+	local branch = pluginConfig.branch  -- Don't default to "main", use nil if not specified
+	local tag = pluginConfig.tag  -- Always prioritize config tag
+	if vim.fn.isdirectory(targetDir) == 1 then
 		-- Plugin already exists, try to get branch and tag from synapse.json
-		local json_branch, json_tag = json_state.get_branch_tag(package_path, plugin_name)
-		-- Only use json_branch if it's not "main" or "master" (these shouldn't be used)
-		if not branch and json_branch and json_branch ~= "main" and json_branch ~= "master" then
-			branch = json_branch
+		local jsonBranch, jsonTag = jsonState.getBranchTag(packagePath, pluginName)
+		-- Only use jsonBranch if it's not "main" or "master" (these shouldn't be used)
+		if not branch and jsonBranch and jsonBranch ~= "main" and jsonBranch ~= "master" then
+			branch = jsonBranch
 		end
 		-- Only use JSON tag if config doesn't have one
-		if not tag and json_tag then
-			tag = json_tag
+		if not tag and jsonTag then
+			tag = jsonTag
 		end
 	else
 		-- New plugin, use branch and tag from config (don't default to "main")
-		branch = plugin_config.branch
-		tag = plugin_config.tag
+		branch = pluginConfig.branch
+		tag = pluginConfig.tag
 	end
 	
-	local repo_url = git_utils.get_repo_url(repo, git_config)
+	local repoUrl = gitUtils.getRepoUrl(repo, gitConfig)
 
 	local command
-	if vim.fn.isdirectory(target_dir) == 1 then
-		-- 如果目录已存在，更新到指定分支或 tag
+	if vim.fn.isdirectory(targetDir) == 1 then
+		-- If directory exists, update to specified branch or tag
 		if tag then
-			-- 如果有 tag，checkout 到该 tag
+			-- If there's a tag, checkout to that tag
 			command = string.format("cd %s && git fetch origin --tags && git checkout %s", 
-				vim.fn.shellescape(target_dir), tag)
+				vim.fn.shellescape(targetDir), tag)
 		elseif branch then
-			-- 如果有 branch，更新到指定分支
-		command = string.format("cd %s && git fetch origin && git checkout %s && git pull origin %s", 
-				vim.fn.shellescape(target_dir), branch, branch)
-	else
-			-- 没有 branch 和 tag，直接 pull
+			-- If there's a branch, update to specified branch
+			command = string.format("cd %s && git fetch origin && git checkout %s && git pull origin %s", 
+				vim.fn.shellescape(targetDir), branch, branch)
+		else
+			-- No branch and tag, just pull
 			command = string.format("cd %s && git fetch origin && git pull origin", 
-				vim.fn.shellescape(target_dir))
+				vim.fn.shellescape(targetDir))
 		end
 	else
-		-- 克隆仓库
+		-- Clone repository
 		if tag then
-			-- 如果有 tag，克隆后 checkout 到该 tag
+			-- If there's a tag, clone then checkout to that tag
 			command = string.format("git clone %s %s && cd %s && git checkout %s", 
-				repo_url, vim.fn.shellescape(target_dir), vim.fn.shellescape(target_dir), tag)
+				repoUrl, vim.fn.shellescape(targetDir), vim.fn.shellescape(targetDir), tag)
 		elseif branch then
-			-- 如果有 branch，克隆指定分支
-			command = string.format("git clone --depth 1 -b %s %s %s", branch, repo_url, vim.fn.shellescape(target_dir))
+			-- If there's a branch, clone specified branch
+			command = string.format("git clone --depth 1 -b %s %s %s", branch, repoUrl, vim.fn.shellescape(targetDir))
 		else
-			-- 没有 branch 和 tag，克隆默认分支
-			command = string.format("git clone --depth 1 %s %s", repo_url, vim.fn.shellescape(target_dir))
+			-- No branch and tag, clone default branch
+			command = string.format("git clone --depth 1 %s %s", repoUrl, vim.fn.shellescape(targetDir))
 		end
 	end
 
-	local job_id = git_utils.execute_command(command, function(success, err)
+	local jobId = gitUtils.executeCommand(command, function(success, err)
 		if not success then
 			return callback(false, err)
 		end
 
 		-- Execute post-install commands if specified
-		if plugin_config.execute and #plugin_config.execute > 0 then
-			execute_commands(plugin_config.execute, target_dir, function(exec_success, exec_err)
-				if not exec_success then
-					return callback(false, exec_err)
+		if pluginConfig.execute and #pluginConfig.execute > 0 then
+			executeCommands(pluginConfig.execute, targetDir, function(execSuccess, execErr)
+				if not execSuccess then
+					return callback(false, execErr)
 				end
 
 				-- Update synapse.json on successful installation
-				if is_main_plugin then
-					-- 主插件：直接更新
-					json_state.update_main_plugin(package_path, plugin_name, plugin_config, branch, tag, true)
-				elseif parent_main_plugins and #parent_main_plugins > 0 then
-					-- 依赖项：更新所有包含它的主插件的 depend 字段
-					for _, main_repo in ipairs(parent_main_plugins) do
-						local main_plugin_name = main_repo:match("([^/]+)$")
-						main_plugin_name = main_plugin_name:gsub("%.git$", "")
-						json_state.add_dependency_to_main_plugin(package_path, main_plugin_name, plugin_config.repo)
+				if isMainPlugin then
+					-- Main plugin: directly update
+					jsonState.updateMainPlugin(packagePath, pluginName, pluginConfig, branch, tag, true)
+				elseif parentMainPlugins and #parentMainPlugins > 0 then
+					-- Dependency: update depend field of all main plugins that include it
+					for _, mainRepo in ipairs(parentMainPlugins) do
+						local mainPluginName = mainRepo:match("([^/]+)$")
+						mainPluginName = mainPluginName:gsub("%.git$", "")
+						jsonState.addDependencyToMainPlugin(packagePath, mainPluginName, pluginConfig.repo)
 					end
 				end
 				callback(true, nil)
 			end)
 		else
 			-- Update synapse.json on successful installation
-			if is_main_plugin then
-				-- 主插件：直接更新
-				json_state.update_main_plugin(package_path, plugin_name, plugin_config, branch, tag, true)
-			elseif parent_main_plugins and #parent_main_plugins > 0 then
-				-- 依赖项：更新所有包含它的主插件的 depend 字段
-				for _, main_repo in ipairs(parent_main_plugins) do
-					local main_plugin_name = main_repo:match("([^/]+)$")
-					main_plugin_name = main_plugin_name:gsub("%.git$", "")
-					json_state.add_dependency_to_main_plugin(package_path, main_plugin_name, plugin_config.repo)
+			if isMainPlugin then
+				-- Main plugin: directly update
+				jsonState.updateMainPlugin(packagePath, pluginName, pluginConfig, branch, tag, true)
+			elseif parentMainPlugins and #parentMainPlugins > 0 then
+				-- Dependency: update depend field of all main plugins that include it
+				for _, mainRepo in ipairs(parentMainPlugins) do
+					local mainPluginName = mainRepo:match("([^/]+)$")
+					mainPluginName = mainPluginName:gsub("%.git$", "")
+					jsonState.addDependencyToMainPlugin(packagePath, mainPluginName, pluginConfig.repo)
 				end
 			end
 			callback(true, nil)
 		end
 	end)
-	return job_id
+	return jobId
 end
 
 return M

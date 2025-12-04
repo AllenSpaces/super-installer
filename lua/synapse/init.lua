@@ -1,23 +1,23 @@
 local config = require("synapse.config")
 local commands = require("synapse.commands")
-local load_config = require("synapse.core.load")
+local loadConfig = require("synapse.core.load")
 local M = {}
 
 --- Setup Synapse plugin manager
---- @param user_config table|nil
-function M.setup(user_config)
-	local merged_config = config.merge(user_config)
-	vim.opt.rtp:append(merged_config.opts.package_path .. "/*")
-	vim.opt.rtp:append(merged_config.opts.package_path .. "/*/after")
+--- @param userConfig table|nil User configuration table
+function M.setup(userConfig)
+	local mergedConfig = config.merge(userConfig)
+	vim.opt.rtp:append(mergedConfig.opts.package_path .. "/*")
+	vim.opt.rtp:append(mergedConfig.opts.package_path .. "/*/after")
 
-	-- Load configs (including dependency opt configurations)
-	-- Only scans .config.lua files from config_path
-	if merged_config.opts.config_path then
-		load_config.load_config(merged_config.opts.config_path)
+	-- Load configs (including dependency opt configurations and imports)
+	-- Scans .config.lua files and import files from config_path
+	if mergedConfig.opts.config_path then
+		loadConfig.loadConfig(mergedConfig.opts.config_path, mergedConfig.imports)
 	end
 
 	-- Setup commands and keymaps
-	commands.setup(merged_config)
+	commands.setup(mergedConfig)
 end
 
 return M

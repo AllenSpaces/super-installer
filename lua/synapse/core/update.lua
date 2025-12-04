@@ -1,102 +1,104 @@
 local ui = require("synapse.ui")
-local error_ui = require("synapse.ui.error")
-local git_utils = require("synapse.utils.git")
-local config_utils = require("synapse.utils.config")
-local string_utils = require("synapse.utils.string")
-local json_state = require("synapse.utils.json_state")
+local errorUi = require("synapse.ui.errorUi")
+local gitUtils = require("synapse.utils.gitUtils")
+local configLoader = require("synapse.utils.configLoader")
+local stringUtils = require("synapse.utils.stringUtils")
+local jsonState = require("synapse.utils.jsonState")
 
 local M = {}
 
-local is_update_aborted = false
-local update_win = nil
+local isUpdateAborted = false
+local updateWin = nil
 local jobs = {}
 
 --- Execute commands sequentially in plugin directory
 --- @param commands table Array of command strings
---- @param plugin_dir string Plugin installation directory
+--- @param pluginDir string Plugin installation directory
 --- @param callback function Callback function(success, err)
-local function execute_commands(commands, plugin_dir, callback)
+local function executeCommands(commands, pluginDir, callback)
 	if not commands or #commands == 0 then
 		return callback(true, nil)
 	end
 
-	local function run_next(index)
+	local function runNext(index)
 		if index > #commands then
 			return callback(true, nil)
 		end
 
 		local cmd = commands[index]
-		local full_cmd = string.format("cd %s && %s", vim.fn.shellescape(plugin_dir), cmd)
+		local fullCmd = string.format("cd %s && %s", vim.fn.shellescape(pluginDir), cmd)
 		
-		git_utils.execute_command(full_cmd, function(success, err)
+		gitUtils.executeCommand(fullCmd, function(success, err)
 			if success then
-				run_next(index + 1)
+				runNext(index + 1)
 			else
 				callback(false, string.format("Execute command failed: %s - %s", cmd, err))
 			end
 		end)
 	end
 
-	run_next(1)
+	runNext(1)
 end
 
+--- Start plugin update process
+--- @param config table Configuration table
 function M.start(config)
-	is_update_aborted = false
+	isUpdateAborted = false
 	jobs = {}
 	-- Clear error cache at start
-	error_ui.clear_cache()
+	errorUi.clearCache()
 
-	-- 从 config_path 读取配置文件
-	local configs = config_utils.load_config_files(config.opts.config_path)
+	-- Load configuration files from config_path (including import files)
+	local configs = configLoader.loadConfigFiles(config.opts.config_path, config.imports)
 	
-	-- 添加默认插件
-	local default_config = {
+	-- Add default plugin
+	local defaultConfig = {
 		repo = config.opts.default,
 		-- Don't set branch by default, let git use default branch
 		config = {},
 	}
-	table.insert(configs, 1, default_config)
+	table.insert(configs, 1, defaultConfig)
 
-	-- 建立 repo 到 plugin_config 的映射（用于获取 tag 等信息）
-	local repo_to_config = {}
-	local main_plugin_repos = {} -- 用于判断是否是主插件
-	for _, plugin_config in ipairs(configs) do
-		if plugin_config.repo then
-			repo_to_config[plugin_config.repo] = plugin_config
-			main_plugin_repos[plugin_config.repo] = true
+	-- Build repo to pluginConfig mapping (for getting tag info, etc.)
+	local repoToConfig = {}
+	local mainPluginRepos = {} -- For determining if it's a main plugin
+	for _, pluginConfig in ipairs(configs) do
+		if pluginConfig.repo then
+			repoToConfig[pluginConfig.repo] = pluginConfig
+			mainPluginRepos[pluginConfig.repo] = true
 		end
 	end
 
-	-- 提取所有 repo 字段（包括依赖项）
+	-- Extract all repo fields (including dependencies)
 	local plugins = {}
-	local plugin_set = {}
+	local pluginSet = {}
 	
-	for _, plugin_config in ipairs(configs) do
-		if plugin_config.repo then
-			-- 添加主插件
-			if not plugin_set[plugin_config.repo] then
-				table.insert(plugins, plugin_config.repo)
-				plugin_set[plugin_config.repo] = true
+	for _, pluginConfig in ipairs(configs) do
+		if pluginConfig.repo then
+			-- Add main plugin
+			if not pluginSet[pluginConfig.repo] then
+				table.insert(plugins, pluginConfig.repo)
+				pluginSet[pluginConfig.repo] = true
 			end
 			
-			-- 添加依赖项
-			if plugin_config.depend and type(plugin_config.depend) == "table" then
-				for _, dep_item in ipairs(plugin_config.depend) do
-					local dep_repo, dep_opt = config_utils.parse_dependency(dep_item)
-					if dep_repo and not plugin_set[dep_repo] then
-						table.insert(plugins, dep_repo)
-						plugin_set[dep_repo] = true
-						-- 为依赖项创建默认配置（如果还没有）
-						if not repo_to_config[dep_repo] then
-							local dep_config = {
-								repo = dep_repo,
+			-- Add dependencies
+			if pluginConfig.depend and type(pluginConfig.depend) == "table" then
+				for _, depItem in ipairs(pluginConfig.depend) do
+					local depRepo, depOpt = configLoader.parseDependency(depItem)
+					if depRepo and not pluginSet[depRepo] then
+						table.insert(plugins, depRepo)
+						pluginSet[depRepo] = true
+						-- Create default config for dependency (if not already exists)
+						if not repoToConfig[depRepo] then
+							local depConfig = {
+								repo = depRepo,
 								-- Don't set branch by default, let git use default branch
 								config = {},
 							}
-							if dep_opt then
-								dep_config.opt = dep_opt
+							if depOpt then
+								depConfig.opt = depOpt
 							end
-							repo_to_config[dep_repo] = dep_config
+							repoToConfig[depRepo] = depConfig
 						end
 					end
 				end
@@ -109,20 +111,20 @@ function M.start(config)
 		return
 	end
 
-	local function plugin_names(list)
+	local function pluginNames(list)
 		local names = {}
 		for _, repo in ipairs(list) do
-			-- UI 中直接显示完整 repo 名称
+			-- UI directly displays full repo name
 			table.insert(names, repo)
 		end
 		return names
 	end
 
-	local function attach_close_autocmd(buf)
+	local function attachCloseAutocmd(buf)
 		vim.api.nvim_create_autocmd("WinClosed", {
 			buffer = buf,
 			callback = function()
-				is_update_aborted = true
+				isUpdateAborted = true
 				for _, job in ipairs(jobs) do
 					vim.fn.jobstop(job)
 				end
@@ -130,76 +132,76 @@ function M.start(config)
 		})
 	end
 
-	local function start_update_flow(targets, attempt, aggregate)
+	local function startUpdateFlow(targets, attempt, aggregate)
 		attempt = attempt or 1
-		aggregate = aggregate or { errors = {}, success = 0, total = 0, checks = 0, check_success = 0 }
+		aggregate = aggregate or { errors = {}, success = 0, total = 0, checks = 0, checkSuccess = 0 }
 		if not targets or #targets == 0 then
 			ui.log_message("Nothing to update.")
 			return
 		end
 
-		is_update_aborted = false
+		isUpdateAborted = false
 		jobs = {}
 
-		local close_registered = false
+		local closeRegistered = false
 
-		local function ensure_close(buf)
-			if close_registered then
+		local function ensureClose(buf)
+			if closeRegistered then
 				return
 			end
-			attach_close_autocmd(buf)
-			close_registered = true
+			attachCloseAutocmd(buf)
+			closeRegistered = true
 		end
 
-		local function extract_retry_targets(check_errors)
-			local retry_targets = {}
+		local function extractRetryTargets(checkErrors)
+			local retryTargets = {}
 			local seen = {}
-			for _, err in ipairs(check_errors or {}) do
+			for _, err in ipairs(checkErrors or {}) do
 				if err.repo and not seen[err.repo] then
 					seen[err.repo] = true
-					table.insert(retry_targets, err.repo)
+					table.insert(retryTargets, err.repo)
 				end
 			end
-			return retry_targets
+			return retryTargets
 		end
 
-		local function format_icon(cfg)
+		local function formatIcon(cfg)
 			if type(cfg) == "table" then
 				return cfg.glyph or cfg.text or cfg.icon or ""
 			end
 			return cfg or ""
 		end
 
-		local function finalize_run()
-			local failure_count = #aggregate.errors
-			local failed_lookup = {}
-			local failed_names = {}
+		local function finalizeRun()
+			local failureCount = #aggregate.errors
+			local failedLookup = {}
+			local failedNames = {}
 			for _, err in ipairs(aggregate.errors) do
 				local name = err.plugin or err.repo or "unknown"
-				if not failed_lookup[name] then
-					failed_lookup[name] = true
-					table.insert(failed_names, name)
+				if not failedLookup[name] then
+					failedLookup[name] = true
+					table.insert(failedNames, name)
 				end
 			end
 
-			if failure_count > 0 then
+			if failureCount > 0 then
 				-- Show failed plugins and allow retry
 				ui.show_report(aggregate.errors, aggregate.success, aggregate.total, {
 					ui = config.opts.ui,
-					failed_plugins = failed_names,
+					failed_plugins = failedNames,
 					on_retry = function()
 						-- Retry failed plugins
-						local retry_targets = {}
+						local retryTargets = {}
 						local seen = {}
 						for _, err in ipairs(aggregate.errors) do
 							local repo = err.repo
 							if repo and not seen[repo] then
-								table.insert(retry_targets, repo)
+								table.insert(retryTargets, repo)
 								seen[repo] = true
 							end
 						end
-						if #retry_targets > 0 then
-							start_update_flow(retry_targets)
+						if #retryTargets > 0 then
+							startUpdateFlow(retryTargets)
 						end
 					end,
 				})
@@ -208,228 +210,233 @@ function M.start(config)
 			end
 		end
 
-		local progress_win = ui.open({
+		local progressWin = ui.open({
 			header = config.opts.ui.header,
 			icon = config.opts.ui.icons.check,
-			plugins = plugin_names(targets),
+			plugins = pluginNames(targets),
 			ui = config.opts.ui,
 		})
-		ensure_close(progress_win.buf)
+		ensureClose(progressWin.buf)
 
-		-- 初始化进度显示为 0
+		-- Initialize progress display to 0
 		vim.schedule(function()
-			ui.update_progress(progress_win, nil, 0, #targets, config.opts.ui)
+			ui.update_progress(progressWin, nil, 0, #targets, config.opts.ui)
 		end)
 
-		-- 在同一个窗口里执行：检查 → 如需更新则立即更新，最多同时执行 10 个插件任务
-		local function run_checks(queue)
+		-- Execute in same window: check → update immediately if needed, up to 10 concurrent plugin tasks
+		local function runChecks(queue)
 			local total = #queue
 			local completed = 0
 			local errors = {}
-			local success_count = 0
+			local successCount = 0
 
-			local function done_all()
+			local function doneAll()
 				aggregate.checks = aggregate.checks + total
-				aggregate.check_success = aggregate.check_success + success_count
+				aggregate.checkSuccess = aggregate.checkSuccess + successCount
 				aggregate.total = aggregate.total + total
 				vim.list_extend(aggregate.errors, errors)
-				finalize_run()
+				finalizeRun()
 			end
 
 			local MAX_CONCURRENT = 10
-			local pending_queue = {}
-			local running_count = 0
+			local pendingQueue = {}
+			local runningCount = 0
 
 			for i = 1, #queue do
-				table.insert(pending_queue, i)
+				table.insert(pendingQueue, i)
 			end
 
-			local function start_next_task()
-				if is_update_aborted then
+			local function startNextTask()
+				if isUpdateAborted then
 					return
 				end
 
-				-- 所有任务都完成
-				if #pending_queue == 0 and running_count == 0 then
-					done_all()
+				-- All tasks completed
+				if #pendingQueue == 0 and runningCount == 0 then
+					doneAll()
 					return
 				end
 
-				-- 已达并发上限或没有待执行任务
-				if running_count >= MAX_CONCURRENT or #pending_queue == 0 then
+				-- Reached concurrency limit or no pending tasks
+				if runningCount >= MAX_CONCURRENT or #pendingQueue == 0 then
 					return
 				end
 
-				-- 取出下一个任务
-				local queue_index = table.remove(pending_queue, 1)
-				local repo = queue[queue_index]
-				-- 显示名称使用完整 repo
-				local display_name = repo
+				-- Take next task from queue
+				local queueIndex = table.remove(pendingQueue, 1)
+				local repo = queue[queueIndex]
+				-- Display name uses full repo
+				local displayName = repo
 
-				running_count = running_count + 1
+				runningCount = runningCount + 1
 
-				-- 标记为 active
+				-- Mark as active
 				vim.schedule(function()
 					ui.update_progress(
-						progress_win,
-						{ plugin = display_name, status = "active" },
+						progressWin,
+						{ plugin = displayName, status = "active" },
 						completed,
 						total,
 						config.opts.ui
 					)
 				end)
 
-				-- 针对单个插件的任务：先 check 再（如需要）update
-				M.check_plugin(repo, config.opts.package_path, repo_to_config[repo], function(ok, result)
+				-- Task for single plugin: check first, then update if needed
+				M.checkPlugin(repo, config.opts.package_path, repoToConfig[repo], function(ok, result)
 					if not ok then
-						-- 检查失败，直接记为错误
-						table.insert(errors, { plugin = display_name, error = result, repo = repo })
-						error_ui.save_error(display_name, result or "Check failed")
+						-- Check failed, mark as error directly
+						table.insert(errors, { plugin = displayName, error = result, repo = repo })
+						errorUi.saveError(displayName, result or "Check failed")
 						completed = completed + 1
-						running_count = running_count - 1
+						runningCount = runningCount - 1
 						vim.schedule(function()
 							ui.update_progress(
-								progress_win,
-								{ plugin = display_name, status = "failed" },
+								progressWin,
+								{ plugin = displayName, status = "failed" },
 								completed,
 								total,
 								config.opts.ui
 							)
-							-- 尝试启动下一个任务（在 schedule 中确保立即执行）
-							start_next_task()
+							-- Try to start next task (in schedule to ensure immediate execution)
+							startNextTask()
 						end)
 						return
 					end
 
 					if result == "need_update" then
-						-- 需要更新：立即更新当前插件
-						local is_main_plugin = main_plugin_repos[repo] == true
-						M.update_plugin(
+						-- Needs update: immediately update current plugin
+						local isMainPlugin = mainPluginRepos[repo] == true
+						M.updatePlugin(
 							repo,
 							config.opts.package_path,
-							repo_to_config[repo],
-							is_main_plugin,
+							repoToConfig[repo],
+							isMainPlugin,
 							config,
 							function(ok2, err2)
-								running_count = running_count - 1
+								runningCount = runningCount - 1
 								if ok2 then
-									success_count = success_count + 1
+									successCount = successCount + 1
 									completed = completed + 1
 									vim.schedule(function()
 										ui.update_progress(
-											progress_win,
-											{ plugin = display_name, status = "done" },
+											progressWin,
+											{ plugin = displayName, status = "done" },
 											completed,
 											total,
 											config.opts.ui
 										)
-										-- 尝试启动下一个任务（在 schedule 中确保立即执行）
-										start_next_task()
+										-- Try to start next task (in schedule to ensure immediate execution)
+										startNextTask()
 									end)
 								else
-									table.insert(errors, { plugin = display_name, error = err2, repo = repo })
-									error_ui.save_error(display_name, err2 or "Update failed")
+									table.insert(errors, { plugin = displayName, error = err2, repo = repo })
+									errorUi.saveError(displayName, err2 or "Update failed")
 									completed = completed + 1
 									vim.schedule(function()
 										ui.update_progress(
-											progress_win,
-											{ plugin = display_name, status = "failed" },
+											progressWin,
+											{ plugin = displayName, status = "failed" },
 											completed,
 											total,
 											config.opts.ui
 										)
-										-- 尝试启动下一个任务（在 schedule 中确保立即执行）
-										start_next_task()
+										-- Try to start next task (in schedule to ensure immediate execution)
+										startNextTask()
 									end)
 								end
 							end
 						)
 					else
-						-- 已是最新：直接标记为 done
-						success_count = success_count + 1
+						-- Already up-to-date: mark as done directly
+						successCount = successCount + 1
 						completed = completed + 1
-						running_count = running_count - 1
+						runningCount = runningCount - 1
 						vim.schedule(function()
 							ui.update_progress(
-								progress_win,
-								{ plugin = display_name, status = "done" },
+								progressWin,
+								{ plugin = displayName, status = "done" },
 								completed,
 								total,
 								config.opts.ui
 							)
-							-- 尝试启动下一个任务（在 schedule 中确保立即执行）
-							start_next_task()
+							-- Try to start next task (in schedule to ensure immediate execution)
+							startNextTask()
 						end)
 					end
 				end)
 			end
 
-			-- 启动初始任务（最多 MAX_CONCURRENT 个）
-			for _ = 1, math.min(MAX_CONCURRENT, #pending_queue) do
-				start_next_task()
+			-- Start initial tasks (up to MAX_CONCURRENT)
+			for _ = 1, math.min(MAX_CONCURRENT, #pendingQueue) do
+				startNextTask()
 			end
 		end
 
-		-- 只用一个窗口：检查 + 按需立即更新
-		run_checks(targets)
+		-- Use single window: check + update immediately if needed
+		runChecks(targets)
 	end
 
-	start_update_flow(plugins)
+	startUpdateFlow(plugins)
 end
 
-function M.check_plugin(plugin, package_path, plugin_config, callback)
-	if is_update_aborted then
+--- Check if plugin needs update
+--- @param plugin string Plugin repository path
+--- @param packagePath string Base package installation path
+--- @param pluginConfig table|nil Plugin configuration
+--- @param callback function Callback function(ok, result) where result is "need_update" or "already_updated"
+function M.checkPlugin(plugin, packagePath, pluginConfig, callback)
+	if isUpdateAborted then
 		return callback(false, "Stop")
 	end
 
-	local plugin_name = plugin:match("([^/]+)$")
-	plugin_name = plugin_name:gsub("%.git$", "")
-	local install_dir = git_utils.get_install_dir(plugin_name, "update", package_path)
-	if vim.fn.isdirectory(install_dir) ~= 1 then
+	local pluginName = plugin:match("([^/]+)$")
+	pluginName = pluginName:gsub("%.git$", "")
+	local installDir = gitUtils.getInstallDir(pluginName, "update", packagePath)
+	if vim.fn.isdirectory(installDir) ~= 1 then
 		return callback(false, "Directory is not found")
 	end
 
-	-- 从 JSON 获取当前记录的 branch / tag
-	local json_branch, json_tag = json_state.get_branch_tag(package_path, plugin_name)
-	-- 配置中的 tag / branch
-	local config_tag = plugin_config and plugin_config.tag or nil
-	local config_branch = plugin_config and plugin_config.branch or nil
+	-- Get current recorded branch / tag from JSON
+	local jsonBranch, jsonTag = jsonState.getBranchTag(packagePath, pluginName)
+	-- Tag / branch from config
+	local configTag = pluginConfig and pluginConfig.tag or nil
+	local configBranch = pluginConfig and pluginConfig.branch or nil
 	
-	-- 1. 如果配置中的 tag 与 JSON 中的不同，需要更新
-	if config_tag ~= json_tag then
+	-- 1. If tag in config differs from JSON, need update
+	if configTag ~= jsonTag then
 		return callback(true, "need_update")
 	end
 
-	-- 2. tag 一致且存在 tag：认为已经是对应 tag，不再检查分支
-	if json_tag or config_tag then
+	-- 2. Tag consistent and tag exists: consider already at corresponding tag, no need to check branch
+	if jsonTag or configTag then
 		return callback(true, "already_updated")
 	end
 
-	-- 3. 无 tag 模式下，检查 branch 是否变化（clone_conf.branch）
-	local function normalize_branch(branch)
+	-- 3. In no-tag mode, check if branch changed (cloneConf.branch)
+	local function normalizeBranch(branch)
 		if not branch or branch == "main" or branch == "master" then
 			return nil
 		end
 		return branch
 	end
 
-	local norm_cfg_branch = normalize_branch(config_branch)
-	local norm_json_branch = normalize_branch(json_branch)
+	local normCfgBranch = normalizeBranch(configBranch)
+	local normJsonBranch = normalizeBranch(jsonBranch)
 
-	if norm_cfg_branch ~= norm_json_branch then
-		-- 仅分支不同也需要执行更新流程（触发 update_plugin）
+	if normCfgBranch ~= normJsonBranch then
+		-- Only branch difference also needs to execute update flow (trigger updatePlugin)
 		return callback(true, "need_update")
 	end
 
-	local fetch_cmd = string.format("cd %s && git fetch --quiet", install_dir)
-	local check_cmd = string.format("cd %s && git rev-list --count HEAD..@{upstream} 2>&1", install_dir)
+	local fetchCmd = string.format("cd %s && git fetch --quiet", installDir)
+	local checkCmd = string.format("cd %s && git rev-list --count HEAD..@{upstream} 2>&1", installDir)
 
-	local job = git_utils.execute_command(fetch_cmd, function(fetch_ok, _)
-		if not fetch_ok then
+	local job = gitUtils.executeCommand(fetchCmd, function(fetchOk, _)
+		if not fetchOk then
 			return callback(false, "Warehouse synchronization failed")
 		end
 
-		git_utils.execute_command(check_cmd, function(_, result)
+		gitUtils.executeCommand(checkCmd, function(_, result)
 			local count = tonumber(result:match("%d+"))
 			if count and count > 0 then
 				callback(true, "need_update")
@@ -441,27 +448,34 @@ function M.check_plugin(plugin, package_path, plugin_config, callback)
 	table.insert(jobs, job)
 end
 
-function M.update_plugin(plugin, package_path, plugin_config, is_main_plugin, config, callback)
-	if is_update_aborted then
+--- Update a single plugin
+--- @param plugin string Plugin repository path
+--- @param packagePath string Base package installation path
+--- @param pluginConfig table|nil Plugin configuration
+--- @param isMainPlugin boolean Whether this is a main plugin
+--- @param config table Configuration table
+--- @param callback function Callback function(success, err)
+function M.updatePlugin(plugin, packagePath, pluginConfig, isMainPlugin, config, callback)
+	if isUpdateAborted then
 		return callback(false, "Stop")
 	end
 
-	local plugin_name = plugin:match("([^/]+)$")
-	plugin_name = plugin_name:gsub("%.git$", "")
-	local install_dir = git_utils.get_install_dir(plugin_name, "update", package_path)
+	local pluginName = plugin:match("([^/]+)$")
+	pluginName = pluginName:gsub("%.git$", "")
+	local installDir = gitUtils.getInstallDir(pluginName, "update", packagePath)
 
-	-- 获取配置中的 tag 和 branch（branch 源自 clone_conf.branch）
-	local config_tag = plugin_config and plugin_config.tag or nil
-	local config_branch = plugin_config and plugin_config.branch or nil
+	-- Get tag and branch from config (branch comes from cloneConf.branch)
+	local configTag = pluginConfig and pluginConfig.tag or nil
+	local configBranch = pluginConfig and pluginConfig.branch or nil
 
-	-- 获取 JSON 中记录的 tag 和 branch
-	local json_branch, json_tag = json_state.get_branch_tag(package_path, plugin_name)
+	-- Get tag and branch recorded in JSON
+	local jsonBranch, jsonTag = jsonState.getBranchTag(packagePath, pluginName)
 
-	-- 如果目录不存在，直接按当前配置重新安装
+	-- If directory doesn't exist, directly reinstall with current config
 	local function reinstall(reason)
-		local install_module = require("synapse.core.install")
-		local git_method = (config and config.method) or "https"
-		install_module.install_plugin(plugin_config, git_method, package_path, is_main_plugin, nil, function(ok, err)
+		local installModule = require("synapse.core.install")
+		local gitMethod = (config and config.method) or "https"
+		installModule.installPlugin(pluginConfig, gitMethod, packagePath, isMainPlugin, nil, function(ok, err)
 			if not ok then
 				return callback(false, (reason or "Reinstall failed") .. ": " .. (err or "Unknown error"))
 			end
@@ -469,31 +483,31 @@ function M.update_plugin(plugin, package_path, plugin_config, is_main_plugin, co
 		end)
 	end
 
-	if vim.fn.isdirectory(install_dir) ~= 1 then
+	if vim.fn.isdirectory(installDir) ~= 1 then
 		return reinstall("Directory missing")
 	end
 
 	---------------------------------------------------------------------------
-	-- 1. 先处理 tag 的变化（tag 优先级高于 branch）
-	--    规则：
-	--    - tag 改成新的值：在当前仓库上 fetch tags + checkout 新 tag
-	--    - tag 从有到无：删除仓库，重新 clone（不带 tag 参数）
+	-- 1. Handle tag changes first (tag has priority over branch)
+	--    Rules:
+	--    - tag changed to new value: fetch tags + checkout new tag on current repo
+	--    - tag removed: delete repo, re-clone (without tag parameter)
 	---------------------------------------------------------------------------
-	if config_tag ~= json_tag then
-		if config_tag then
+	if configTag ~= jsonTag then
+		if configTag then
 			local cmd = string.format(
 				"cd %s && git fetch origin --tags && git checkout %s && git submodule update --init --recursive",
-				vim.fn.shellescape(install_dir),
-				config_tag
+				vim.fn.shellescape(installDir),
+				configTag
 			)
-			local job = git_utils.execute_command(cmd, function(ok, output)
+			local job = gitUtils.executeCommand(cmd, function(ok, output)
 				if not ok then
 					return callback(false, output)
 				end
 
-				if is_main_plugin then
-					-- 记录新的 tag，branch 在 tag 模式下一般可以忽略
-					json_state.update_main_plugin(package_path, plugin_name, plugin_config, nil, config_tag, true)
+				if isMainPlugin then
+					-- Record new tag, branch can generally be ignored in tag mode
+					jsonState.updateMainPlugin(packagePath, pluginName, pluginConfig, nil, configTag, true)
 				end
 
 				callback(true, "Switched tag and updated")
@@ -501,9 +515,9 @@ function M.update_plugin(plugin, package_path, plugin_config, is_main_plugin, co
 			table.insert(jobs, job)
 			return
 		else
-			-- tag 被移除：删除目录并用“无 tag 参数”的方式重新克隆
-			local remove_cmd = string.format("rm -rf %s", vim.fn.shellescape(install_dir))
-			return git_utils.execute_command(remove_cmd, function(ok, err)
+			-- Tag removed: delete directory and re-clone with "no tag parameter" method
+			local removeCmd = string.format("rm -rf %s", vim.fn.shellescape(installDir))
+			return gitUtils.executeCommand(removeCmd, function(ok, err)
 				if not ok then
 					return callback(false, "Failed to remove plugin for tag removal: " .. (err or "Unknown error"))
 				end
@@ -513,39 +527,39 @@ function M.update_plugin(plugin, package_path, plugin_config, is_main_plugin, co
 	end
 
 	---------------------------------------------------------------------------
-	-- 2. 再处理 branch 的变化（仅在没有 tag 模式下）
-	--    规则：
-	--    - clone_conf.branch 改成新的分支：当前仓库上 checkout 新分支 + pull
-	--    - clone_conf.branch 从有到无：删除仓库，重新 clone（不带 -b，走默认分支）
+	-- 2. Handle branch changes (only in no-tag mode)
+	--    Rules:
+	--    - cloneConf.branch changed to new branch: checkout new branch + pull on current repo
+	--    - cloneConf.branch removed: delete repo, re-clone (without -b, use default branch)
 	---------------------------------------------------------------------------
-	local function normalize_branch(branch)
+	local function normalizeBranch(branch)
 		if not branch or branch == "main" or branch == "master" then
 			return nil
 		end
 		return branch
 	end
 
-	local norm_cfg_branch = normalize_branch(config_branch)
-	local norm_json_branch = normalize_branch(json_branch)
+	local normCfgBranch = normalizeBranch(configBranch)
+	local normJsonBranch = normalizeBranch(jsonBranch)
 
-	if norm_cfg_branch ~= norm_json_branch then
-		if norm_cfg_branch then
-			-- 从 A -> B：使用 git checkout -B 创建/重置本地分支，再拉最新代码
-			-- 注意这里不再强依赖 origin/<branch> 已存在，避免类似
+	if normCfgBranch ~= normJsonBranch then
+		if normCfgBranch then
+			-- From A -> B: use git checkout -B to create/reset local branch, then pull latest code
+			-- Note: no longer strongly depends on origin/<branch> existing, to avoid errors like
 			-- "fatal: 'origin/xxx' is not a commit and a branch 'xxx' cannot be created from it"
 			local cmd = string.format(
 				"cd %s && git fetch origin && git checkout -B %s && git pull origin %s && git submodule update --init --recursive",
-				vim.fn.shellescape(install_dir),
-				norm_cfg_branch,
-				norm_cfg_branch
+				vim.fn.shellescape(installDir),
+				normCfgBranch,
+				normCfgBranch
 			)
-			local job = git_utils.execute_command(cmd, function(ok, output)
+			local job = gitUtils.executeCommand(cmd, function(ok, output)
 				if not ok then
 					return callback(false, output)
 				end
 
-				if is_main_plugin then
-					json_state.update_main_plugin(package_path, plugin_name, plugin_config, norm_cfg_branch, nil, true)
+				if isMainPlugin then
+					jsonState.updateMainPlugin(packagePath, pluginName, pluginConfig, normCfgBranch, nil, true)
 				end
 
 				callback(true, "Switched branch and updated")
@@ -553,9 +567,9 @@ function M.update_plugin(plugin, package_path, plugin_config, is_main_plugin, co
 			table.insert(jobs, job)
 			return
 		else
-			-- branch 字段被移除：删除仓库，重新 clone（不带 -b）
-			local remove_cmd = string.format("rm -rf %s", vim.fn.shellescape(install_dir))
-			return git_utils.execute_command(remove_cmd, function(ok, err)
+			-- Branch field removed: delete repo, re-clone (without -b)
+			local removeCmd = string.format("rm -rf %s", vim.fn.shellescape(installDir))
+			return gitUtils.executeCommand(removeCmd, function(ok, err)
 				if not ok then
 					return callback(false, "Failed to remove plugin for branch removal: " .. (err or "Unknown error"))
 				end
@@ -565,58 +579,58 @@ function M.update_plugin(plugin, package_path, plugin_config, is_main_plugin, co
 	end
 
 	---------------------------------------------------------------------------
-	-- 3. tag 和 branch 都没变：普通更新
+	-- 3. Tag and branch unchanged: normal update
 	---------------------------------------------------------------------------
 	local cmd
-	if config_tag then
-		-- 理论上不会到这里（上面已经处理 tag），保留以防逻辑调整
+	if configTag then
+		-- Shouldn't reach here (tag already handled above), keep for logic adjustments
 		cmd = string.format(
 			"cd %s && git fetch origin --tags && git checkout %s && git submodule update --init --recursive",
-			vim.fn.shellescape(install_dir),
-			config_tag
+			vim.fn.shellescape(installDir),
+			configTag
 		)
 	else
-		local branch = norm_cfg_branch or norm_json_branch
+		local branch = normCfgBranch or normJsonBranch
 		if branch then
 			cmd = string.format(
 				"cd %s && git fetch origin && git checkout -B %s && git pull origin %s && git submodule update --init --recursive",
-				vim.fn.shellescape(install_dir),
+				vim.fn.shellescape(installDir),
 				branch,
 				branch
 			)
 		else
 			cmd = string.format(
 				"cd %s && git fetch origin && git pull origin && git submodule update --init --recursive",
-				vim.fn.shellescape(install_dir)
+				vim.fn.shellescape(installDir)
 			)
 		end
 	end
 
-	local job = git_utils.execute_command(cmd, function(ok, output)
+	local job = gitUtils.executeCommand(cmd, function(ok, output)
 		if not ok then
 			return callback(false, output)
 		end
 
-		local execute_cmds = plugin_config and plugin_config.execute or nil
-		local function finalize_ok()
-			if plugin_config and is_main_plugin then
-				local actual_branch = norm_cfg_branch or norm_json_branch
-				local actual_tag = config_tag or json_tag
-				json_state.update_main_plugin(package_path, plugin_name, plugin_config, actual_branch, actual_tag, true)
+		local executeCmds = pluginConfig and pluginConfig.execute or nil
+		local function finalizeOk()
+			if pluginConfig and isMainPlugin then
+				local actualBranch = normCfgBranch or normJsonBranch
+				local actualTag = configTag or jsonTag
+				jsonState.updateMainPlugin(packagePath, pluginName, pluginConfig, actualBranch, actualTag, true)
 			end
 			callback(true, "Success")
 		end
 
-		-- 更新后执行 execute
-		if execute_cmds and type(execute_cmds) == "table" and #execute_cmds > 0 then
-			execute_commands(execute_cmds, install_dir, function(exec_success, exec_err)
-				if not exec_success then
-					return callback(false, exec_err)
+		-- Execute execute commands after update
+		if executeCmds and type(executeCmds) == "table" and #executeCmds > 0 then
+			executeCommands(executeCmds, installDir, function(execSuccess, execErr)
+				if not execSuccess then
+					return callback(false, execErr)
 				end
-				finalize_ok()
+				finalizeOk()
 			end)
 		else
-			finalize_ok()
+			finalizeOk()
 		end
 	end)
 	table.insert(jobs, job)

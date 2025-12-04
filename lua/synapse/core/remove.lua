@@ -1,88 +1,91 @@
 local ui = require("synapse.ui")
-local error_ui = require("synapse.ui.error")
-local git_utils = require("synapse.utils.git")
-local config_utils = require("synapse.utils.config")
-local json_state = require("synapse.utils.json_state")
-local string_utils = require("synapse.utils.string")
+local errorUi = require("synapse.ui.errorUi")
+local gitUtils = require("synapse.utils.gitUtils")
+local configLoader = require("synapse.utils.configLoader")
+local jsonState = require("synapse.utils.jsonState")
+local stringUtils = require("synapse.utils.stringUtils")
 
 local M = {}
 
-local cleanup_active = true
+local cleanupActive = true
 local jobs = {}
 
+--- Start plugin removal process
+--- @param config table Configuration table
 function M.start(config)
-	cleanup_active = true
+	cleanupActive = true
 	jobs = {}
 	-- Clear error cache at start
-	error_ui.clear_cache()
-	-- 从 config_path 读取配置文件
-	local configs = config_utils.load_config_files(config.opts.config_path)
+	errorUi.clearCache()
 	
-	-- 添加默认插件
-	local default_config = {
+	-- Load configuration files from config_path (including import files)
+	local configs = configLoader.loadConfigFiles(config.opts.config_path, config.imports)
+	
+	-- Add default plugin
+	local defaultConfig = {
 		repo = config.opts.default,
 		branch = "main",
 		config = {},
 	}
-	table.insert(configs, 1, default_config)
+	table.insert(configs, 1, defaultConfig)
 
-	-- 收集所有需要的插件（包括依赖项）
-	local required_plugins = {}
-	for _, plugin_config in ipairs(configs) do
-		if plugin_config.repo then
-			local plugin_name = plugin_config.repo:match("([^/]+)$")
-			plugin_name = plugin_name:gsub("%.git$", "")
-			required_plugins[plugin_name] = true
+	-- Collect all required plugins (including dependencies)
+	local requiredPlugins = {}
+	for _, pluginConfig in ipairs(configs) do
+		if pluginConfig.repo then
+			local pluginName = pluginConfig.repo:match("([^/]+)$")
+			pluginName = pluginName:gsub("%.git$", "")
+			requiredPlugins[pluginName] = true
 			
-			-- 添加依赖项
-			if plugin_config.depend and type(plugin_config.depend) == "table" then
-				for _, dep_item in ipairs(plugin_config.depend) do
-					local dep_repo = config_utils.parse_dependency(dep_item)
-					if dep_repo then
-					local dep_name = dep_repo:match("([^/]+)$")
-					dep_name = dep_name:gsub("%.git$", "")
-					required_plugins[dep_name] = true
+			-- Add dependencies
+			if pluginConfig.depend and type(pluginConfig.depend) == "table" then
+				for _, depItem in ipairs(pluginConfig.depend) do
+					local depRepo = configLoader.parseDependency(depItem)
+					if depRepo then
+						local depName = depRepo:match("([^/]+)$")
+						depName = depName:gsub("%.git$", "")
+						requiredPlugins[depName] = true
 					end
 				end
 			end
 		end
 	end
 
-	local packer_path = config.opts.package_path
-	local installed_plugins = vim.split(vim.fn.glob(packer_path .. "/*"), "\n")
+	local packagePath = config.opts.package_path
+	local installedPlugins = vim.split(vim.fn.glob(packagePath .. "/*"), "\n")
 
-	local removal_candidates = {}
-	for _, path in ipairs(installed_plugins) do
+	local removalCandidates = {}
+	for _, path in ipairs(installedPlugins) do
 		-- Only process directories (plugins are directories, not files)
 		if vim.fn.isdirectory(path) == 1 then
 			local name = vim.fn.fnamemodify(path, ":t")
-			if not required_plugins[name] and name ~= "synapse" and name ~= "synapse.nvim" then
-				table.insert(removal_candidates, name)
+			if not requiredPlugins[name] and name ~= "synapse" and name ~= "synapse.nvim" then
+				table.insert(removalCandidates, name)
 			end
 		end
 	end
 
-	if #removal_candidates == 0 then
-		-- 没有需要卸载的插件，直接返回，不更新 json
+	if #removalCandidates == 0 then
+		-- No plugins to remove, return directly without updating json
 		ui.log_message("No unused plugins found.")
 		return
 	end
 
-	local function run_removal_queue(queue)
+	local function runRemovalQueue(queue)
 		if not queue or #queue == 0 then
 			return
 		end
 
-		cleanup_active = true
+		cleanupActive = true
 		jobs = {}
 		
-		-- 保存 configs 和 config 的引用，供 finalize 使用
-		local saved_configs = configs
-		local saved_config = config
+		-- Save references to configs and config for use in finalize
+		local savedConfigs = configs
+		local savedConfig = config
 
-		local progress_win = nil
+		local progressWin = nil
 		if #queue > 1 then
-			progress_win = ui.open({
+			progressWin = ui.open({
 				header = config.opts.ui.header,
 				icon = config.opts.ui.icons.remove,
 				plugins = queue,
@@ -90,9 +93,9 @@ function M.start(config)
 			})
 
 			vim.api.nvim_create_autocmd("WinClosed", {
-				buffer = progress_win.buf,
+				buffer = progressWin.buf,
 				callback = function()
-					cleanup_active = false
+					cleanupActive = false
 					for _, job in ipairs(jobs) do
 						if job then
 							vim.fn.jobstop(job)
@@ -101,46 +104,46 @@ function M.start(config)
 				end,
 			})
 
-			-- 初始化进度显示为 0
+			-- Initialize progress display to 0
 			vim.schedule(function()
-				ui.update_progress(progress_win, nil, 0, #queue, config.opts.ui)
+				ui.update_progress(progressWin, nil, 0, #queue, config.opts.ui)
 			end)
 		end
 
 		local total = #queue
 		local errors = {}
-		local removed_count = 0
+		local removedCount = 0
 		local completed = 0
-		local failed_list = {}
+		local failedList = {}
 
 		local function finalize()
-			if not cleanup_active then
+			if not cleanupActive then
 				return
 			end
 
-			-- 只有在实际卸载了插件后才更新 json（同步 depend 字段）
-			if removed_count > 0 then
-				for _, plugin_config in ipairs(saved_configs) do
-					if plugin_config.repo then
-						local plugin_name = plugin_config.repo:match("([^/]+)$")
-						plugin_name = plugin_name:gsub("%.git$", "")
-						local install_dir = git_utils.get_install_dir(plugin_name, "start", saved_config.opts.package_path)
+			-- Only update json if plugins were actually removed (sync depend field)
+			if removedCount > 0 then
+				for _, pluginConfig in ipairs(savedConfigs) do
+					if pluginConfig.repo then
+						local pluginName = pluginConfig.repo:match("([^/]+)$")
+						pluginName = pluginName:gsub("%.git$", "")
+						local installDir = gitUtils.getInstallDir(pluginName, "start", savedConfig.opts.package_path)
 						
-						-- 只更新已安装的主插件
-						if vim.fn.isdirectory(install_dir) == 1 then
-							-- 从 json 获取当前的 branch 和 tag（如果存在）
-							local json_branch, json_tag = json_state.get_branch_tag(saved_config.opts.package_path, plugin_name)
-							-- 使用配置中的 branch 和 tag，如果配置中没有则使用 json 中的
-							local actual_branch = plugin_config.branch or json_branch
-							local actual_tag = plugin_config.tag or json_tag
+						-- Only update installed main plugins
+						if vim.fn.isdirectory(installDir) == 1 then
+							-- Get current branch and tag from json (if exists)
+							local jsonBranch, jsonTag = jsonState.getBranchTag(savedConfig.opts.package_path, pluginName)
+							-- Use branch and tag from config, or from json if config doesn't have them
+							local actualBranch = pluginConfig.branch or jsonBranch
+							local actualTag = pluginConfig.tag or jsonTag
 							
-							-- 更新 json 记录（这会同步 depend 字段）
-							json_state.update_main_plugin(
-								saved_config.opts.package_path,
-								plugin_name,
-								plugin_config,
-								actual_branch,
-								actual_tag,
+							-- Update json record (this will sync depend field)
+							jsonState.updateMainPlugin(
+								savedConfig.opts.package_path,
+								pluginName,
+								pluginConfig,
+								actualBranch,
+								actualTag,
 								true
 							)
 						end
@@ -150,22 +153,22 @@ function M.start(config)
 
 			if #errors > 0 then
 				-- Show failed plugins and allow retry
-				ui.show_report(errors, removed_count, total, {
-					ui = saved_config.opts.ui,
-					failed_plugins = failed_list,
+				ui.show_report(errors, removedCount, total, {
+					ui = savedConfig.opts.ui,
+					failed_plugins = failedList,
 					on_retry = function()
 						-- Retry failed plugins
-						local retry_queue = {}
+						local retryQueue = {}
 						for _, err in ipairs(errors) do
 							for _, plugin in ipairs(queue) do
 								if plugin == err.plugin then
-									table.insert(retry_queue, plugin)
+									table.insert(retryQueue, plugin)
 									break
 								end
 							end
 						end
-						if #retry_queue > 0 then
-							run_removal_queue(retry_queue)
+						if #retryQueue > 0 then
+							runRemovalQueue(retryQueue)
 						end
 					end,
 				})
@@ -174,117 +177,122 @@ function M.start(config)
 			end
 		end
 
-		-- 并发执行器：最多同时执行10个任务
+		-- Concurrent executor: execute up to 10 tasks simultaneously
 		local MAX_CONCURRENT = 10
-		local pending_queue = {}
-		local running_count = 0
+		local pendingQueue = {}
+		local runningCount = 0
 
-		-- 初始化待执行队列
+		-- Initialize pending queue
 		for i = 1, #queue do
-			table.insert(pending_queue, i)
+			table.insert(pendingQueue, i)
 		end
 
-		local function start_next_removal()
-			if not cleanup_active then
+		local function startNextRemoval()
+			if not cleanupActive then
 				return
 			end
 
-			-- 如果队列为空且没有正在运行的任务，完成
-			if #pending_queue == 0 and running_count == 0 then
+			-- If queue is empty and no tasks are running, finish
+			if #pendingQueue == 0 and runningCount == 0 then
 				finalize()
 				return
 			end
 
-			-- 如果正在运行的任务达到上限或队列为空，等待
-			if running_count >= MAX_CONCURRENT or #pending_queue == 0 then
+			-- If running tasks reach limit or queue is empty, wait
+			if runningCount >= MAX_CONCURRENT or #pendingQueue == 0 then
 				return
 			end
 
-			-- 从队列中取出一个任务
-			local queue_index = table.remove(pending_queue, 1)
-			local plugin = queue[queue_index]
+			-- Take a task from queue
+			local queueIndex = table.remove(pendingQueue, 1)
+			local plugin = queue[queueIndex]
 
-			running_count = running_count + 1
-			if progress_win then
+			runningCount = runningCount + 1
+			if progressWin then
 				vim.schedule(function()
-					ui.update_progress(progress_win, { plugin = plugin, status = "active" }, completed, total, config.opts.ui)
+					ui.update_progress(progressWin, { plugin = plugin, status = "active" }, completed, total, config.opts.ui)
 				end)
 			end
 
-			local job_id = M.remove_plugin(plugin, config.opts.package_path, function(success, err)
-				running_count = running_count - 1
+			local jobId = M.removePlugin(plugin, config.opts.package_path, function(success, err)
+				runningCount = runningCount - 1
 				completed = completed + 1
 
 				if success then
-					removed_count = removed_count + 1
+					removedCount = removedCount + 1
 				else
 					table.insert(errors, { plugin = plugin, error = err or "Removal failed" })
-					table.insert(failed_list, plugin)
-					error_ui.save_error(plugin, err or "Removal failed")
+					table.insert(failedList, plugin)
+					errorUi.saveError(plugin, err or "Removal failed")
 				end
 
-				-- 立即更新进度条并启动下一个任务
-				if progress_win then
+				-- Immediately update progress bar and start next task
+				if progressWin then
 					vim.schedule(function()
 						ui.update_progress(
-							progress_win,
+							progressWin,
 							{ plugin = plugin, status = success and "done" or "failed" },
 							completed,
 							total,
 							config.opts.ui
 						)
-						-- 尝试启动下一个任务（在 schedule 中确保立即执行）
-						start_next_removal()
+						-- Try to start next task (in schedule to ensure immediate execution)
+						startNextRemoval()
 					end)
 				else
-					-- 如果没有进度窗口，直接启动下一个任务
-					start_next_removal()
+					-- If no progress window, directly start next task
+					startNextRemoval()
 				end
 			end)
-			if job_id then
-				table.insert(jobs, job_id)
+			if jobId then
+				table.insert(jobs, jobId)
 			end
 		end
 
-		-- 启动初始任务（最多5个）
-		for i = 1, math.min(MAX_CONCURRENT, #pending_queue) do
-			start_next_removal()
+		-- Start initial tasks (up to MAX_CONCURRENT)
+		for i = 1, math.min(MAX_CONCURRENT, #pendingQueue) do
+			startNextRemoval()
 		end
 	end
 
-	run_removal_queue(removal_candidates)
+	runRemovalQueue(removalCandidates)
 end
 
-function M.remove_plugin(plugin_name, package_path, callback)
-	local install_path = git_utils.get_install_dir(plugin_name, "start", package_path)
+--- Remove a single plugin
+--- @param pluginName string Plugin name to remove
+--- @param packagePath string Base package installation path
+--- @param callback function Callback function(success, err)
+--- @return number|nil jobId Job ID for tracking
+function M.removePlugin(pluginName, packagePath, callback)
+	local installPath = gitUtils.getInstallDir(pluginName, "start", packagePath)
 
-	if vim.fn.isdirectory(install_path) ~= 1 then
+	if vim.fn.isdirectory(installPath) ~= 1 then
 		callback(true)
 		return
 	end
 
 	-- Get dependencies from synapse.json
-	local dependencies = json_state.get_plugin_dependencies(package_path, plugin_name)
+	local dependencies = jsonState.getPluginDependencies(packagePath, pluginName)
 	
 	-- Remove the plugin
-	local cmd = string.format("rm -rf %s", vim.fn.shellescape(install_path))
-	local job_id = git_utils.execute_command(cmd, function(success, err)
+	local cmd = string.format("rm -rf %s", vim.fn.shellescape(installPath))
+	local jobId = gitUtils.executeCommand(cmd, function(success, err)
 		if success then
 			-- Remove from synapse.json
-			json_state.remove_plugin_entry(package_path, plugin_name)
+			jsonState.removePluginEntry(packagePath, pluginName)
 			
 			-- Check and remove unreferenced dependencies
 			if dependencies and #dependencies > 0 then
-				for _, dep_repo in ipairs(dependencies) do
-					local dep_name = string_utils.get_plugin_name(dep_repo)
+				for _, depRepo in ipairs(dependencies) do
+					local depName = stringUtils.getPluginName(depRepo)
 					-- Check if dependency is referenced by other plugins
-					if not json_state.is_dependency_referenced(dep_name, package_path, plugin_name) then
+					if not jsonState.isDependencyReferenced(depName, packagePath, pluginName) then
 						-- Remove unreferenced dependency
-						local dep_path = git_utils.get_install_dir(dep_name, "start", package_path)
-						if vim.fn.isdirectory(dep_path) == 1 then
-							local dep_cmd = string.format("rm -rf %s", vim.fn.shellescape(dep_path))
-							git_utils.execute_command(dep_cmd, function() end)
-							json_state.remove_plugin_entry(package_path, dep_name)
+						local depPath = gitUtils.getInstallDir(depName, "start", packagePath)
+						if vim.fn.isdirectory(depPath) == 1 then
+							local depCmd = string.format("rm -rf %s", vim.fn.shellescape(depPath))
+							gitUtils.executeCommand(depCmd, function() end)
+							jsonState.removePluginEntry(packagePath, depName)
 						end
 					end
 				end
@@ -297,7 +305,7 @@ function M.remove_plugin(plugin_name, package_path, callback)
 		end
 		callback(success, err)
 	end)
-	return job_id
+	return jobId
 end
 
 return M

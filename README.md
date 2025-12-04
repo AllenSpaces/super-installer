@@ -10,6 +10,8 @@ A modern, lightweight plugin manager for Neovim with a beautiful UI and intellig
 - 🧹 **Auto Cleanup**: Remove unused plugins automatically
 - 🔧 **Post-Install Commands**: Execute build commands after installation/update
 - ⚙️ **Auto Setup**: Automatically set up plugins from `.config.lua` files
+- 📦 **Import Support**: Load plugin configurations from non-standard files using the `import` field
+- 🌳 **Nested Imports**: Support for arbitrary depth nested import structures
 
 ## Installation
 
@@ -61,6 +63,16 @@ require("synapse").setup({
         -- Default: vim.fn.stdpath("config")
         config_path = vim.fn.stdpath("config"),
     },
+    
+    -- Import field: Load configurations from non-standard files
+    -- Supports arbitrary depth nested structures
+    imports = {
+        lua = {
+            test = {
+                test1 = { "ok" },  -- Loads config_path/lua/test/test1/ok.lua
+            },
+        },
+    },
 })
 ```
 
@@ -85,6 +97,32 @@ require("synapse").setup({
 - **Default**: `"float"`
 - **Options**: `"float"`, `"split"`
 
+#### `imports` (table)
+- **Description**: Import configurations from non-standard files. Supports arbitrary depth nested structures
+- **Format**: Nested table structure where keys represent directory paths and values represent filenames
+- **Example**:
+  ```lua
+  imports = {
+      lua = {
+          "config1",  -- Loads config_path/lua/config1.lua
+          test = {
+              "config2",  -- Loads config_path/lua/test/config2.lua
+              test1 = { "config3" },  -- Loads config_path/lua/test/test1/config3.lua
+          },
+      },
+  }
+  ```
+  
+  **The above configuration will load:**
+  1. `config_path/lua/config1.lua` (from array element at lua level)
+  2. `config_path/lua/test/config2.lua` (from array element at test level)
+  3. `config_path/lua/test/test1/config3.lua` (from nested structure)
+  
+  **Rules:**
+  - Array elements (numeric keys with string values) are appended directly to the current path
+  - String keys create subdirectories and continue recursion
+  - Mixed arrays and string keys in the same table are both processed
+
 #### `keys.download` (string)
 - **Description**: Keymap to open plugin installation UI
 - **Default**: `"<leader>si"`
@@ -103,7 +141,7 @@ require("synapse").setup({
 
 Create `.config.lua` files in your `config_path` directory (or subdirectories). These files support both plugin installation configuration and automatic setup.
 
-**Important**: Only files ending with `.config.lua` will be recognized and automatically processed.
+**Important**: Only files ending with `.config.lua` will be recognized and automatically processed. For non-standard files, use the `imports` field in your main configuration.
 
 ### Configuration File Structure
 
@@ -120,8 +158,8 @@ Each `.config.lua` file must return a table with the following optional fields:
   - Example: `"v1.2.3"`
   - Takes precedence over `branch`
 
-- **`clone_conf.branch`** (string): Clone a specific branch
-  - Example: `{ branch = "main" }`
+- **`branch`** (string): Clone a specific branch
+  - Example: `"main"`
   - Only used if `tag` is not specified
 
 - **`execute`** (string|table): Commands to run after installation/update
@@ -170,6 +208,7 @@ Each `.config.lua` file must return a table with the following optional fields:
 
 - **`initialization`** (function): Function executed before `plugin.setup()`
   - Receives a package wrapper that allows accessing plugin submodules
+  - Supports arbitrary depth nested structures for accessing submodules
   - Use this to configure plugin submodules before setup
   - Example:
     ```lua
@@ -177,6 +216,9 @@ Each `.config.lua` file must return a table with the following optional fields:
         -- Access submodules: package({ "submodule" }) or package.submodule
         local install = package({ "install" })
         install.prefer_git = true
+        
+        -- Support for nested structures
+        local nested = package({ test = { test1 = { "ok" } } })
     end
     ```
 
@@ -205,7 +247,7 @@ return {
 return {
     repo = "windwp/nvim-autopairs",
     primary = "nvim-autopairs",
-    config = function(plugin)
+    config = function()
         plugin.setup({})
         -- Additional integration code
     end,
@@ -281,6 +323,30 @@ return {
 }
 ```
 
+#### Using Import Field
+
+```lua
+-- ~/.config/nvim/init.lua
+require("synapse").setup({
+    opts = {
+        config_path = vim.fn.stdpath("config"),
+    },
+    imports = {
+        lua = {
+            test = { "config" },  -- Loads ~/.config/nvim/lua/test/config.lua
+        },
+    },
+})
+
+-- ~/.config/nvim/lua/test/config.lua (not a .config.lua file)
+return {
+    repo = "username/plugin-name",
+    opts = {
+        option1 = "value1",
+    },
+}
+```
+
 ## Commands
 
 - **`:SynapseDownload`**: Open plugin installation UI
@@ -308,8 +374,8 @@ require("synapse").setup({
 
 ## How It Works
 
-1. **Installation**: Create `.config.lua` files in your `config_path` directory
-2. **Auto-Setup**: On Neovim startup, Synapse scans for `.config.lua` files and automatically:
+1. **Installation**: Create `.config.lua` files in your `config_path` directory, or use the `imports` field to load configurations from non-standard files
+2. **Auto-Setup**: On Neovim startup, Synapse scans for `.config.lua` files and import files, then automatically:
    - Loads plugin configurations
    - Calls `plugin.setup(opts)` for plugins with `opts` field
    - Executes `config` function for plugins with `config` field
@@ -324,6 +390,7 @@ require("synapse").setup({
 ### Plugins Not Recognized
 
 - Ensure configuration files end with `.config.lua` and are in `config_path` directory (supports subdirectories)
+- For non-standard files, use the `imports` field in your main configuration
 - Check that files return a table with a `repo` field
 - Verify `repo` field is not empty
 
@@ -343,4 +410,3 @@ require("synapse").setup({
 ## License
 
 See LICENSE file for details.
-
