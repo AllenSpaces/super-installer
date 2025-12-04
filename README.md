@@ -96,27 +96,42 @@ require("synapse").setup({
 
 ### 4.2 Custom Configuration Directory
 
-Files ending with `.config.lua` in the specified directory will be automatically loaded:
+**Important**: Only files ending with `.config.lua` will be automatically recognized and loaded for plugin setup.
+
+There are two types of configuration directories:
+
+1. **`load_config`**: Directory for `.config.lua` files (auto-loaded and auto-setup)
+   - Files must end with `.config.lua` (e.g., `plugin.config.lua`)
+   - These files are automatically loaded and plugins are automatically set up
+   - Supports both `opts` (table) and `config` (function) formats
+
+2. **`config_path`**: Directory for `.lua` files (plugin installation only)
+   - Files end with `.lua` (e.g., `plugin.lua`)
+   - These files are only used for plugin installation configuration
+   - Do NOT use `.config.lua` extension here
 
 ```lua
 require("synapse").setup({
     opts = {
         -- Directory to scan for .config.lua files (recursive)
+        -- Only files ending with .config.lua will be auto-loaded and auto-setup
         load_config = vim.fn.stdpath("config") .. "/lua",
         
         -- Directory to scan for plugin installation configs (.lua files)
+        -- Files here are only used for installation, not auto-setup
         config_path = vim.fn.stdpath("config") .. "/lua/plugins",
     },
 })
 ```
 
-**Example**: Create `~/.config/nvim/lua/plugins/example.config.lua`:
+**Example**: Create `~/.config/nvim/lua/pkgs/example.config.lua` (note: must end with `.config.lua`):
 
 ```lua
 -- Method 1: opts as table (automatically calls plugin.setup(opts))
 -- opts must be a table type
 return {
     repo = "username/plugin-name",
+    primary = "plugin-name",  -- Optional: specify require name
     opts = {
         -- Configuration options will be passed to plugin.setup()
         option1 = "value1",
@@ -126,14 +141,13 @@ return {
     
 -- Method 2: config as function (manual setup)
 -- config must be a function type
+-- The function receives the plugin reference as a parameter
 return {
     repo = "username/plugin-name",
-    config = function()
-        local status, plugin = pcall(require, "plugin-name")
-        if not status then
-            vim.notify("plugin-name is not found ...", vim.log.levels.ERROR, { title = "Nvim" })
-            return
-        end
+    primary = "plugin-name",  -- Optional: specify require name
+    config = function(plugin)
+        -- plugin is the require("plugin-name") result
+        -- No need to manually require, it's already loaded
         plugin.setup({
             -- Your configuration
         })
@@ -141,12 +155,14 @@ return {
 }
 ```
 
-**Note**: 
-- `opts` must be a **table** type - Synapse will automatically:
+**Important Notes**: 
+- **File naming**: Only files ending with `.config.lua` will be automatically loaded and set up
+- **`opts` format** (must be a **table** type) - Synapse will automatically:
   1. Extract the plugin name from the `repo` field (or use `primary` if specified)
   2. Try to `require` the plugin
   3. Call `plugin.setup(opts_table)` if the plugin has a `setup` function
-- `config` must be a **function** type - You have full control over plugin setup
+- **`config` format** (must be a **function** type) - You have full control over plugin setup
+  - The function receives the plugin reference as a parameter: `config = function(plugin) ... end`
 
 #### Additional Configuration Options
 
@@ -181,9 +197,15 @@ return {
 
 ### 4.3 Plugin Installation Configuration Format
 
+**Important**: Files in `config_path` directory are used **only for plugin installation**, not for auto-setup.
+
+- Use `.lua` extension (e.g., `example.lua`) in `config_path` directory
+- These files define which plugins to install, but do NOT automatically set them up
+- For auto-setup, create `.config.lua` files in `load_config` directory instead
+
 Create `.lua` files in your `config_path` directory to define which plugins to install:
 
-**Basic Format** (`config_path/example.lua`):
+**Basic Format** (`config_path/example.lua` - note: `.lua` extension, NOT `.config.lua`):
 
 ```lua
 return {
@@ -235,32 +257,20 @@ return {
     -- Use this if the require name differs from the extracted name
     primary = "custom-plugin-name",
     
-    -- Plugin configuration (optional)
-    -- Method 1: opts as table (automatically calls plugin.setup(opts))
-    -- opts must be a table type
-    opts = {
-        option1 = "value1",
-        option2 = "value2",
-    },
-    
-    -- Method 2: config as function (manual setup)
-    -- config must be a function type
-    -- config = function()
-    --     require("plugin-name").setup({})
-    -- end,
-    
-    -- Initialization function (optional)
-    -- Executed before plugin.setup() is called
-    -- initialization = function(package)
-    --     -- package is a wrapper for accessing plugin submodules
-    -- end,
+    -- Note: opts and config fields in config_path files are NOT automatically executed
+    -- They are only used for dependency configuration via the 'opt' field
+    -- For auto-setup, create a .config.lua file in load_config directory instead
 }
 ```
 
 **Examples**:
 
+#### Installation Configuration Examples (`.lua` files in `config_path`)
+
+These files are used **only for plugin installation**, not for auto-setup:
+
 ```lua
--- config_path/mason.lua
+-- config_path/mason.config.lua (installation config only)
 return {
     repo = "williamboman/mason.nvim",
     depend = {
@@ -276,9 +286,33 @@ return {
 ```
 
 ```lua
--- config_path/lualine.lua (using table opts)
+-- config_path/versioned.config.lua (installation config only)
+return {
+    repo = "username/plugin-name",
+    tag = "v1.2.3",  -- Lock to specific tag version
+}
+```
+
+```lua
+-- config_path/compiled.lua (installation config only)
+return {
+    repo = "username/compiled-plugin",
+    execute = {
+        "make",
+        "cargo build --release",
+    },
+}
+```
+
+#### Auto-Setup Configuration Examples (`.config.lua` files in `load_config`)
+
+**Important**: Only files ending with `.config.lua` in `load_config` directory will be automatically loaded and set up.
+
+```lua
+-- load_config/pkgs/lualine.config.lua (auto-setup with opts table)
 return {
     repo = "nvim-lualine/lualine.nvim",
+    primary = "lualine",  -- Optional: specify require name
     opts = {
         options = {
             theme = "auto",
@@ -289,26 +323,28 @@ return {
 ```
 
 ```lua
--- config_path/versioned.lua
+-- load_config/pkgs/autopairs.config.lua (auto-setup with config function)
 return {
-    repo = "username/plugin-name",
-    tag = "v1.2.3",  -- Lock to specific tag version
+    repo = "windwp/nvim-autopairs",
+    primary = "nvim-autopairs",
+    config = function(plugin)
+        -- plugin is the require("nvim-autopairs") result
+        plugin.setup({})
+        
+        -- Setup cmp integration
+        local status, cmp = pcall(require, "cmp")
+        if status then
+            local autopairs_cmp = require("nvim-autopairs.completion.cmp")
+            if autopairs_cmp and autopairs_cmp.on_confirm_done then
+                cmp.event:on("confirm_done", autopairs_cmp.on_confirm_done)
+            end
+        end
+    end,
 }
 ```
 
 ```lua
--- config_path/compiled.lua
-return {
-    repo = "username/compiled-plugin",
-    execute = {
-        "make",
-        "cargo build --release",
-    },
-}
-```
-
-```lua
--- config_path/custom-name.lua (using primary field)
+-- load_config/pkgs/custom-name.config.lua (auto-setup with primary field)
 return {
     repo = "username/plugin-name",
     primary = "custom-plugin-name",  -- Use this as require name
@@ -319,11 +355,13 @@ return {
 ```
 
 ```lua
--- config_path/with-init.lua (using initialization function)
+-- load_config/pkgs/with-init.config.lua (auto-setup with initialization function)
 return {
     repo = "username/plugin-name",
+    primary = "plugin-name",
     initialization = function(package)
         -- Access plugin submodules before setup
+        -- package is a wrapper that supports: package({ "submodule" }) or package.submodule()
         local install = package({ "install" })
         -- Or: local install = package.install()
     end,
@@ -334,9 +372,10 @@ return {
 ```
 
 ```lua
--- config_path/mason.lua (dependency with primary field)
+-- load_config/pkgs/mason.config.lua (auto-setup with dependency configuration)
 return {
     repo = "williamboman/mason.nvim",
+    primary = "mason",
     depend = {
         {
             "williamboman/mason-lspconfig.nvim",
@@ -346,6 +385,9 @@ return {
                 automatic_installation = true,
             }
         },
+    },
+    opts = {
+        -- Mason configuration
     },
 }
 ```
@@ -417,8 +459,12 @@ Synapse automatically handles plugin dependencies:
 5. **Configuration with `opt`**: Dependencies can be configured using the `opt` field
 
 **Loading Order**:
-1. All `.config.lua` files are loaded first (main plugins are set up)
+1. All `.config.lua` files from `load_config` directory are loaded first (main plugins are automatically set up)
 2. Then dependencies with `opt` are configured (ensuring proper initialization order)
+
+**File Naming Rules**:
+- **`.config.lua` files** (in `load_config` directory): Automatically loaded and plugins are automatically set up
+- **`.lua` files** (in `config_path` directory): Used only for plugin installation configuration, NOT auto-setup
 
 This ensures that if `plugin-a` depends on `plugin-b`, and both have configurations, `plugin-b` will be set up before `plugin-a`'s dependency configuration is applied.
 
@@ -442,9 +488,11 @@ This helps handle different plugin naming conventions automatically.
 
 ### Plugins Not Recognized
 
-- Ensure installation configuration files (`.lua`) are in `config_path` (supports subdirectories)
+- **For plugin installation**: Ensure installation configuration files (`.lua`) are in `config_path` (supports subdirectories)
+- **For auto-setup**: Ensure configuration files end with `.config.lua` and are in `load_config` directory
 - Check that files return a table with a `repo` field
 - Verify `repo` field is not empty
+- **Important**: Only `.config.lua` files are automatically loaded and set up. Regular `.lua` files in `config_path` are only used for installation.
 
 ### Keymaps Not Working
 
