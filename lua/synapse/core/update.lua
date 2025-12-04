@@ -69,13 +69,74 @@ function M.start(config)
 		end
 	end
 
+	-- Migrate dependencies from public folder back to single plugin's depend folder if they're no longer shared
+	-- This should happen before checking what needs to be updated
+	local packagePath = config.opts.package_path
+	local publicDir = string.format("%s/public", packagePath)
+	if vim.fn.isdirectory(publicDir) == 1 then
+		-- Build dependency to main plugins mapping for current configuration
+		local currentDepToMainPlugins = {}
+		for _, pluginConfig in ipairs(configs) do
+			if pluginConfig.repo and pluginConfig.depend and type(pluginConfig.depend) == "table" then
+				for _, depItem in ipairs(pluginConfig.depend) do
+					local depRepo = configLoader.parseDependency(depItem)
+					if depRepo then
+						if not currentDepToMainPlugins[depRepo] then
+							currentDepToMainPlugins[depRepo] = {}
+						end
+						if not mainPluginRepos[depRepo] then
+							table.insert(currentDepToMainPlugins[depRepo], pluginConfig.repo)
+						end
+					end
+				end
+			end
+		end
+		
+		-- Check all dependencies in public folder
+		local publicDeps = vim.split(vim.fn.glob(publicDir .. "/*"), "\n")
+		for _, depPath in ipairs(publicDeps) do
+			if vim.fn.isdirectory(depPath) == 1 then
+				local depName = vim.fn.fnamemodify(depPath, ":t")
+				-- Find the dependency repo in currentDepToMainPlugins
+				local depRepo = nil
+				for repo, _ in pairs(currentDepToMainPlugins) do
+					local repoName = repo:match("([^/]+)$")
+					repoName = repoName:gsub("%.git$", "")
+					if repoName == depName then
+						depRepo = repo
+						break
+					end
+				end
+				
+				-- If dependency is found and only used by one main plugin, move it back
+				if depRepo and currentDepToMainPlugins[depRepo] and #currentDepToMainPlugins[depRepo] == 1 then
+					local mainRepo = currentDepToMainPlugins[depRepo][1]
+					local stringUtils = require("synapse.utils.stringUtils")
+					local mainPluginName = stringUtils.getPluginName(mainRepo)
+					local targetDir = string.format("%s/%s/depend/%s", packagePath, mainPluginName, depName)
+					
+					-- Create depend directory if it doesn't exist
+					local dependDir = string.format("%s/%s/depend", packagePath, mainPluginName)
+					if vim.fn.isdirectory(dependDir) ~= 1 then
+						vim.fn.mkdir(dependDir, "p")
+					end
+					
+					-- Move the dependency back (only if target doesn't exist)
+					if vim.fn.isdirectory(targetDir) ~= 1 then
+						local moveCmd = string.format("mv %s %s", vim.fn.shellescape(depPath), vim.fn.shellescape(targetDir))
+						vim.fn.system(moveCmd)
+					end
+				end
+			end
+		end
+	end
+	
 	-- Extract all repo fields (including dependencies)
 	-- Include synapse plugin itself in update list
 	local plugins = {}
 	local pluginSet = {}
 	
 	-- Add synapse plugin if it exists in package_path (special location: package_path/synapse.nvim/)
-	local packagePath = config.opts.package_path
 	local synapsePath = string.format("%s/synapse.nvim", packagePath)
 	if vim.fn.isdirectory(synapsePath) == 1 then
 		-- Use default repo from config, or fallback to common path
