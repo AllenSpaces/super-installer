@@ -3,9 +3,6 @@ local stringUtils = require("synapse.utils.stringUtils")
 
 local M = {}
 
--- Plugin registry for lazy loading
-M.plugins = {} -- plugin_name -> { config, module, file_path, handlers }
-
 --- Scan all .config.lua files in the specified directory (recursive)
 --- @param configPath string Path to scan for .config.lua files
 --- @return table Array of module information tables
@@ -263,21 +260,9 @@ local function createPackageWrapper(baseName)
 	return wrapper
 end
 
---- Check if plugin should be lazy loaded
---- @param mod table Module configuration
---- @return boolean
-local function shouldLazyLoad(mod)
-	if not mod then
-		return false
-	end
-	-- Check for lazy loading triggers: cmd, event, or ft
-	return (mod.cmd ~= nil) or (mod.event ~= nil) or (mod.ft ~= nil)
-end
-
 --- Execute config function for a module
 --- @param module table Module information
---- @param forceLoad boolean|nil Force immediate load (skip lazy loading)
-local function executeConfig(module, forceLoad)
+local function executeConfig(module)
 	if not module.enabled then
 		return
 	end
@@ -287,9 +272,22 @@ local function executeConfig(module, forceLoad)
 		return
 	end
 
-	-- Check if plugin should be lazy loaded
-	local isLazy = not forceLoad and shouldLazyLoad(mod)
-	
+	-- Check if this is a plugin config (has repo field) or generic config
+	if not mod.repo then
+		-- Generic config file (no repo field), execute config directly
+		if mod.config and type(mod.config) == "function" then
+			local ok, err = pcall(mod.config)
+			if not ok then
+				vim.notify(
+					"Error executing config for " .. module.name .. ": " .. tostring(err),
+					vim.log.levels.WARN,
+					{ title = "Synapse" }
+				)
+			end
+		end
+		return
+	end
+
 	-- Extract plugin name
 	local pluginName = extractPluginName(mod, module.name, module.file_path)
 	if not pluginName then
@@ -301,26 +299,6 @@ local function executeConfig(module, forceLoad)
 		return
 	end
 
-	-- Register plugin for lazy loading if needed
-	if isLazy then
-		M.plugins[pluginName] = {
-			config = mod,
-			module = module,
-			file_path = module.file_path,
-			handlers = {
-				cmd = mod.cmd,
-				event = mod.event,
-				ft = mod.ft,
-			},
-		}
-		-- Setup lazy loading handlers
-		require("synapse.core.handlers.loadCommand").setup(pluginName, mod.cmd)
-		require("synapse.core.handlers.loadEvent").setup(pluginName, mod.event)
-		require("synapse.core.handlers.loadFileType").setup(pluginName, mod.ft)
-		return
-	end
-
-	-- Immediate load (non-lazy plugins)
 	-- Support opts as table: directly call plugin.setup(opts)
 	-- opts must be a table, not a function
 	if mod.opts and type(mod.opts) == "table" then
@@ -342,6 +320,12 @@ local function executeConfig(module, forceLoad)
 			local baseName = pluginName:gsub("%-nvim$", ""):gsub("%.nvim$", "")
 			if baseName ~= pluginName then
 				table.insert(possibleNames, baseName)
+			end
+
+			-- Try removing nvim- prefix (e.g., nvim-lspconfig -> lspconfig)
+			if pluginName:match("^nvim%-") then
+				local withoutPrefix = pluginName:gsub("^nvim%-", "")
+				table.insert(possibleNames, withoutPrefix)
 			end
 		end
 
@@ -399,77 +383,82 @@ local function executeConfig(module, forceLoad)
 
 	-- Support config as function
 	if mod.config and type(mod.config) == "function" then
-		-- Call initialization function if it exists, before config
-		if mod.initialization and type(mod.initialization) == "function" then
-			-- Try to extract plugin name and require it
-			if pluginName then
-				-- If primary field is specified, use it directly without trying variations
-				local possibleNames = {}
-				if mod.primary and type(mod.primary) == "string" and mod.primary ~= "" then
-					-- Use primary field directly
-					table.insert(possibleNames, mod.primary)
-				else
-					-- Try multiple possible plugin names
-					table.insert(possibleNames, pluginName)
-					if pluginName:match("%u") then
-						table.insert(possibleNames, pluginName:lower())
-					end
-					local baseName = pluginName:gsub("%-nvim$", ""):gsub("%.nvim$", "")
-					if baseName ~= pluginName then
-						table.insert(possibleNames, baseName)
-					end
-				end
+		-- Try to require plugin first (config function may need it as parameter)
+		local plugin = nil
+		if pluginName then
+			-- Build list of possible require names
+			local possibleNames = {}
+			
+			-- If primary field is specified, use it as the first option
+			if mod.primary and type(mod.primary) == "string" and mod.primary ~= "" then
+				table.insert(possibleNames, mod.primary)
+			end
+			
+			-- Also try plugin name and variations
+			table.insert(possibleNames, pluginName)
+			if pluginName:match("%u") then
+				table.insert(possibleNames, pluginName:lower())
+			end
+			-- Try removing -nvim or .nvim suffix
+			local baseName = pluginName:gsub("%-nvim$", ""):gsub("%.nvim$", "")
+			if baseName ~= pluginName then
+				table.insert(possibleNames, baseName)
+			end
+			-- Try removing nvim- prefix (e.g., nvim-lspconfig -> lspconfig)
+			if pluginName:match("^nvim%-") then
+				local withoutPrefix = pluginName:gsub("^nvim%-", "")
+				table.insert(possibleNames, withoutPrefix)
+			end
 
-				-- Try to require plugin and call initialization
-				for _, name in ipairs(possibleNames) do
-					local ok, plugin = pcall(require, name)
-					if ok and plugin then
-						-- Create package wrapper function for recursive require paths
-						local packageWrapper = createPackageWrapper(name)
-						local initOk, initErr = pcall(mod.initialization, packageWrapper)
-						if not initOk then
-							vim.notify(
-								"Error executing initialization for " .. name .. ": " .. tostring(initErr),
-								vim.log.levels.WARN,
-								{ title = "Synapse" }
-							)
-						end
-						break
-					end
+			-- Try to require plugin
+			for _, name in ipairs(possibleNames) do
+				local ok, requiredPlugin = pcall(require, name)
+				if ok and requiredPlugin then
+					plugin = requiredPlugin
+					break
 				end
 			end
 		end
 
+		-- Call initialization function if it exists, before config
+		if mod.initialization and type(mod.initialization) == "function" and plugin then
+			-- Create package wrapper function for recursive require paths
+			local packageWrapper = createPackageWrapper(pluginName)
+			local initOk, initErr = pcall(mod.initialization, packageWrapper)
+			if not initOk then
+				vim.notify(
+					"Error executing initialization for " .. pluginName .. ": " .. tostring(initErr),
+					vim.log.levels.WARN,
+					{ title = "Synapse" }
+				)
+			end
+		end
+
 		-- Execute config function safely
-		local ok, err = pcall(mod.config)
+		-- Pass plugin as parameter if it was successfully required
+		local ok, err
+		if plugin then
+			ok, err = pcall(mod.config, plugin)
+		else
+			-- If plugin not found, try calling config without parameter
+			ok, err = pcall(mod.config)
+		end
+		
 		if not ok then
 			vim.notify(
 				"Error executing config for " .. module.name .. ": " .. tostring(err),
 				vim.log.levels.WARN,
 				{ title = "Synapse" }
 			)
+		elseif not plugin then
+			-- Warn if plugin was expected but not found
+			vim.notify(
+				"Plugin " .. (pluginName or "unknown") .. " not found when executing config for " .. module.name,
+				vim.log.levels.WARN,
+				{ title = "Synapse" }
+			)
 		end
 	end
-end
-
---- Load a plugin immediately (called by lazy load handlers)
---- @param pluginName string Plugin name
-function M.loadPlugin(pluginName)
-	if not pluginName then
-		return
-	end
-
-	local plugin = M.plugins[pluginName]
-	if not plugin then
-		-- Plugin might have been loaded already or doesn't exist
-		return
-	end
-
-	-- Remove from lazy loading registry before loading
-	M.plugins[pluginName] = nil
-
-	-- Load the plugin immediately (force load)
-	executeConfig(plugin.module, true)
 end
 
 --- Load configuration files from configPath
@@ -576,7 +565,7 @@ function M.loadConfig(configPath, imports)
 
 	-- Load all modules (main plugin configurations)
 	for _, module in ipairs(configModules) do
-		executeConfig(module, false)
+		executeConfig(module)
 	end
 
 	-- Step 2: Load dependency opt configurations from the same configPath
