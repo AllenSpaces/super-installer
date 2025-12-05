@@ -3,6 +3,9 @@ local stringUtils = require("synapse.utils.stringUtils")
 
 local M = {}
 
+-- Plugin registry for lazy loading
+M.plugins = {} -- plugin_name -> { config, module, file_path, handlers }
+
 --- Scan all .config.lua files in the specified directory (recursive)
 --- @param configPath string Path to scan for .config.lua files
 --- @return table Array of module information tables
@@ -260,9 +263,21 @@ local function createPackageWrapper(baseName)
 	return wrapper
 end
 
+--- Check if plugin should be lazy loaded
+--- @param mod table Module configuration
+--- @return boolean
+local function shouldLazyLoad(mod)
+	if not mod then
+		return false
+	end
+	-- Check for lazy loading triggers: cmd, event, or ft
+	return (mod.cmd ~= nil) or (mod.event ~= nil) or (mod.ft ~= nil)
+end
+
 --- Execute config function for a module
 --- @param module table Module information
-local function executeConfig(module)
+--- @param forceLoad boolean|nil Force immediate load (skip lazy loading)
+local function executeConfig(module, forceLoad)
 	if not module.enabled then
 		return
 	end
@@ -272,19 +287,43 @@ local function executeConfig(module)
 		return
 	end
 
+	-- Check if plugin should be lazy loaded
+	local isLazy = not forceLoad and shouldLazyLoad(mod)
+	
+	-- Extract plugin name
+	local pluginName = extractPluginName(mod, module.name, module.file_path)
+	if not pluginName then
+		vim.notify(
+			"Failed to extract plugin name from " .. module.name,
+			vim.log.levels.WARN,
+			{ title = "Synapse" }
+		)
+		return
+	end
+
+	-- Register plugin for lazy loading if needed
+	if isLazy then
+		M.plugins[pluginName] = {
+			config = mod,
+			module = module,
+			file_path = module.file_path,
+			handlers = {
+				cmd = mod.cmd,
+				event = mod.event,
+				ft = mod.ft,
+			},
+		}
+		-- Setup lazy loading handlers
+		require("synapse.core.handlers.loadCommand").setup(pluginName, mod.cmd)
+		require("synapse.core.handlers.loadEvent").setup(pluginName, mod.event)
+		require("synapse.core.handlers.loadFileType").setup(pluginName, mod.ft)
+		return
+	end
+
+	-- Immediate load (non-lazy plugins)
 	-- Support opts as table: directly call plugin.setup(opts)
 	-- opts must be a table, not a function
 	if mod.opts and type(mod.opts) == "table" then
-		local pluginName = extractPluginName(mod, module.name, module.file_path)
-		if not pluginName then
-			vim.notify(
-				"Failed to extract plugin name from " .. module.name,
-				vim.log.levels.WARN,
-				{ title = "Synapse" }
-			)
-			return
-		end
-
 		-- If primary field is specified, use it directly without trying variations
 		local possibleNames = {}
 		if mod.primary and type(mod.primary) == "string" and mod.primary ~= "" then
@@ -363,7 +402,6 @@ local function executeConfig(module)
 		-- Call initialization function if it exists, before config
 		if mod.initialization and type(mod.initialization) == "function" then
 			-- Try to extract plugin name and require it
-			local pluginName = extractPluginName(mod, module.name, module.file_path)
 			if pluginName then
 				-- If primary field is specified, use it directly without trying variations
 				local possibleNames = {}
@@ -412,6 +450,26 @@ local function executeConfig(module)
 			)
 		end
 	end
+end
+
+--- Load a plugin immediately (called by lazy load handlers)
+--- @param pluginName string Plugin name
+function M.loadPlugin(pluginName)
+	if not pluginName then
+		return
+	end
+
+	local plugin = M.plugins[pluginName]
+	if not plugin then
+		-- Plugin might have been loaded already or doesn't exist
+		return
+	end
+
+	-- Remove from lazy loading registry before loading
+	M.plugins[pluginName] = nil
+
+	-- Load the plugin immediately (force load)
+	executeConfig(plugin.module, true)
 end
 
 --- Load configuration files from configPath
@@ -518,7 +576,7 @@ function M.loadConfig(configPath, imports)
 
 	-- Load all modules (main plugin configurations)
 	for _, module in ipairs(configModules) do
-		executeConfig(module)
+		executeConfig(module, false)
 	end
 
 	-- Step 2: Load dependency opt configurations from the same configPath
@@ -537,3 +595,4 @@ function M.loadConfig(configPath, imports)
 end
 
 return M
+

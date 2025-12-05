@@ -37,7 +37,7 @@ Using a Plugin Manager~
 
 If you're using another plugin manager to install Synapse.nvim:
 
-    Using lazy.nvim:
+    Using any plugin manager:
 >
         {
             "OriginCoderPulse/synapse.nvim",
