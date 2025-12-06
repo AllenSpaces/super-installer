@@ -1,6 +1,6 @@
 # Synapse.nvim
 
-A modern, lightweight plugin manager for Neovim with a beautiful UI, intelligent dependency management, and lazy loading support.
+A modern, lightweight plugin manager for Neovim with a beautiful UI, intelligent dependency management, and automatic plugin setup.
 
 ## Features
 
@@ -12,7 +12,6 @@ A modern, lightweight plugin manager for Neovim with a beautiful UI, intelligent
 - ⚙️ **Auto Setup**: Automatically set up plugins from `.config.lua` files
 - 📦 **Import Support**: Load plugin configurations from non-standard files using the `imports` field
 - 🌳 **Nested Imports**: Support for arbitrary depth nested import structures
-- ⏱️ **Lazy Loading**: Load plugins on-demand using `cmd`, `event`, or `ft` triggers
 
 ## Installation
 
@@ -155,23 +154,15 @@ Each `.config.lua` file must return a table with the following fields:
 | `primary` | `string` | Custom plugin name for `require()`. Use if the actual require name differs from the extracted name | `"custom-name"` |
 | `depend` | `table` | Plugin dependencies. See dependency format below | See examples |
 
-#### Lazy Loading Fields
-
-| Field | Type | Description | Example |
-|-------|------|-------------|---------|
-| `cmd` | `string\|string[]` | Load plugin when command is executed | `"SomeCommand"` or `{ "Cmd1", "Cmd2" }` |
-| `event` | `string\|string[]\|table` | Load plugin when event is triggered. Supports patterns like `"BufEnter *.lua"` | `"BufEnter"`, `"VimStarted"`, or `{ "BufEnter", "BufNewFile" }` |
-| `ft` | `string\|string[]` | Load plugin when filetype is detected | `"lua"` or `{ "lua", "python" }` |
-
-**Note**: Plugins with `cmd`, `event`, or `ft` fields will be lazy-loaded. Plugins without these fields will be loaded immediately on startup.
-
 #### Auto-Setup Configuration Fields
 
 | Field | Type | Description | Example |
 |-------|------|-------------|---------|
 | `opts` | `table` | Configuration table passed to `plugin.setup(opts)`. Automatically calls `plugin.setup(opts)` if the plugin has a `setup` function | `{ option1 = "value1" }` |
-| `config` | `function` | Manual setup function. Use for custom setup logic | `function() plugin.setup({}) end` |
+| `config` | `function` | Manual setup function. Use for custom setup logic. Receives the plugin module as parameter if available | `function(plugin) plugin.setup({}) end` |
 | `initialization` | `function` | Function executed before `plugin.setup()`. Receives a package wrapper for accessing plugin submodules | `function(package) local install = package({ "install" }) end` |
+
+**Note**: All plugins are loaded immediately on startup. Plugins are automatically added to the runtime path and configured during Neovim initialization.
 
 ### Dependency Format
 
@@ -197,30 +188,6 @@ depend = {
 }
 ```
 
-### Event Specification Format
-
-The `event` field supports multiple formats:
-
-**String format:**
-```lua
-event = "BufEnter"  -- Simple event
-event = "BufEnter *.lua"  -- Event with pattern
-event = "VimStarted"  -- Custom event (triggered after UIEnter)
-```
-
-**Array format:**
-```lua
-event = { "BufEnter", "BufNewFile" }  -- Multiple events
-```
-
-**Table format:**
-```lua
-event = {
-    event = "BufEnter",
-    pattern = "*.lua",
-}
-```
-
 ### Configuration Examples
 
 #### Basic Plugin Setup
@@ -239,59 +206,6 @@ return {
 }
 ```
 
-#### Lazy Loading Examples
-
-**Load on command:**
-```lua
-return {
-    repo = "some-plugin/command-plugin",
-    cmd = "SomeCommand",
-    opts = {
-        -- Configuration
-    },
-}
-```
-
-**Load on event:**
-```lua
-return {
-    repo = "some-plugin/event-plugin",
-    event = "VimStarted",  -- Load after Vim starts
-    opts = {
-        -- Configuration
-    },
-}
-
--- Or with pattern
-return {
-    repo = "some-plugin/pattern-plugin",
-    event = "BufEnter *.lua",  -- Load when entering Lua files
-    opts = {
-        -- Configuration
-    },
-}
-```
-
-**Load on filetype:**
-```lua
-return {
-    repo = "some-plugin/ft-plugin",
-    ft = "lua",  -- Load when opening Lua files
-    opts = {
-        -- Configuration
-    },
-}
-
--- Multiple filetypes
-return {
-    repo = "some-plugin/multi-ft-plugin",
-    ft = { "lua", "python", "javascript" },
-    opts = {
-        -- Configuration
-    },
-}
-```
-
 #### Plugin with Manual Setup
 
 ```lua
@@ -299,9 +213,8 @@ return {
 return {
     repo = "windwp/nvim-autopairs",
     primary = "nvim-autopairs",
-    config = function()
-        local autopairs = require("nvim-autopairs")
-        autopairs.setup({})
+    config = function(plugin)
+        plugin.setup({})
         -- Additional integration code
     end,
 }
@@ -313,7 +226,7 @@ return {
 -- ~/.config/nvim/lua/pkgs/tree-sitter.config.lua
 return {
     repo = "nvim-treesitter/nvim-treesitter",
-    primary = "nvim-treesitter",
+    primary = "nvim-treesitter.configs",
     initialization = function(package)
         -- Access submodules: package({ "submodule" }) or package.submodule
         local install = package({ "install" })
@@ -380,6 +293,20 @@ return {
 }
 ```
 
+#### Generic Configuration File (No Plugin)
+
+```lua
+-- ~/.config/nvim/lua/configs/custom.config.lua
+-- Files without a 'repo' field are treated as generic configuration files
+return {
+    config = function()
+        -- Your custom configuration code
+        vim.opt.number = true
+        vim.opt.relativenumber = true
+    end,
+}
+```
+
 #### Using Import Field
 
 ```lua
@@ -433,19 +360,16 @@ require("synapse").setup({
 
 1. **Installation**: Create `.config.lua` files in your `config_path` directory, or use the `imports` field to load configurations from non-standard files
 2. **Auto-Setup**: On Neovim startup, Synapse scans for `.config.lua` files and import files, then automatically:
+   - Adds all installed plugins to the runtime path
    - Loads plugin configurations
-   - Sets up lazy loading handlers for plugins with `cmd`, `event`, or `ft` fields
-   - Calls `plugin.setup(opts)` for plugins with `opts` field (non-lazy plugins)
-   - Executes `config` function for plugins with `config` field (non-lazy plugins)
+   - Calls `plugin.setup(opts)` for plugins with `opts` field
+   - Executes `config` function for plugins with `config` field
    - Applies dependency configurations
-3. **Lazy Loading**: Plugins with lazy loading triggers are registered and loaded when:
-   - `cmd`: User executes the specified command
-   - `event`: The specified event is triggered
-   - `ft`: A file with the specified filetype is opened
-4. **Loading Order**:
-   - Main plugins are set up first (non-lazy plugins)
+3. **Loading Order**:
+   - All plugins are added to the runtime path first
+   - Main plugins are set up (non-plugin config files are executed)
    - Then dependency configurations are applied
-   - Lazy plugins are loaded on-demand
+   - All plugins are available immediately after startup
 
 ## Plugin Directory Structure
 
@@ -462,8 +386,8 @@ Synapse.nvim uses a structured directory layout for plugin management:
 
 - Ensure configuration files end with `.config.lua` and are in `config_path` directory (supports subdirectories)
 - For non-standard files, use the `imports` field in your main configuration
-- Check that files return a table with a `repo` field
-- Verify `repo` field is not empty
+- Check that files return a table with a `repo` field (for plugin configs) or a `config` function (for generic configs)
+- Verify `repo` field is not empty for plugin configurations
 
 ### Plugins Not Set Up
 
@@ -471,13 +395,14 @@ Synapse.nvim uses a structured directory layout for plugin management:
 - Check that `opts` is a table type (not a function)
 - For manual setup, use `config` function format
 - Ensure the plugin is properly installed before setup
+- Check that the plugin is added to the runtime path
 
-### Lazy Loading Not Working
+### Plugins Not Found
 
-- Verify the `cmd`, `event`, or `ft` field is correctly specified
-- Check that the plugin is registered in the lazy loading registry
-- For `event` triggers, ensure the event name is correct
-- For `ft` triggers, verify the filetype is detected correctly
+- Verify the plugin is installed in the correct directory structure
+- Check that `package_path` is correctly configured
+- Ensure the plugin name matches the directory name
+- Use the `primary` field if the require name differs from the directory name
 
 ### Keymaps Not Working
 
